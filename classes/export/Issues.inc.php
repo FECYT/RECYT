@@ -126,7 +126,7 @@ class Issues extends AbstractRunner implements InterfaceRunner {
             WHERE journal_id = ".$this->contextId."
             AND published = 1
             ORDER BY date_published DESC
-            LIMIT 3"
+            LIMIT 4"
             );
 
         while (!$query->EOF) {
