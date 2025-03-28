@@ -89,3 +89,13 @@ msgstr "Export editorial"
 
 msgid "plugins.generic.calidadfecyt.export.editorial.description"
 msgstr "Export editorial flow of the selected submission"
+
+# Date range
+msgid "plugins.generic.calidadfecyt.dateRange"
+msgstr "Date Range"
+
+msgid "plugins.generic.calidadfecyt.dateFrom"
+msgstr "From: "
+
+msgid "plugins.generic.calidadfecyt.dateTo"
+msgstr "To: "

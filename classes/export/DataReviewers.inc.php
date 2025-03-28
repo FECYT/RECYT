@@ -6,7 +6,8 @@ use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
 
-class DataReviewers extends AbstractRunner implements InterfaceRunner {
+class DataReviewers extends AbstractRunner implements InterfaceRunner
+{
 
     private $contextId;
 
@@ -15,15 +16,15 @@ class DataReviewers extends AbstractRunner implements InterfaceRunner {
         $fileManager = new \FileManager();
         $context = $params["context"];
         $dirFiles = $params['temporaryFullFilePath'];
-        if(!$context) {
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
         $this->contextId = $context->getId();
 
         try {
-            $dateTo = date('Ymd', strtotime("-1 day"));
-            $dateFrom = date("Ymd", strtotime("-1 year", strtotime($dateTo)));
-            $file = fopen($dirFiles . "/revisores_".$dateFrom."_".$dateTo.".csv", "w");
+            $dateTo = $params['dateTo'] ?? date('Ymd', strtotime("-1 day"));
+            $dateFrom = $params['dateFrom'] ?? date("Ymd", strtotime("-1 year", strtotime($dateTo)));
+            $file = fopen($dirFiles . "/revisores_" . $dateFrom . "_" . $dateTo . ".csv", "w");
             fputcsv($file, array("ID", "Nombre", "Apellidos", "Institución", "Correo electrónico"));
 
             $reviewers = $this->getReviewers(array($dateFrom, $dateTo, $this->contextId));
@@ -40,7 +41,7 @@ class DataReviewers extends AbstractRunner implements InterfaceRunner {
 
             fclose($file);
 
-            if(!isset($params['exportAll'])) {
+            if (!isset($params['exportAll'])) {
                 $zipFilename = $dirFiles . '/dataReviewers.zip';
                 ZipUtils::zip([], [$dirFiles], $zipFilename);
                 $fileManager->downloadByPath($zipFilename);
@@ -49,7 +50,6 @@ class DataReviewers extends AbstractRunner implements InterfaceRunner {
             throw new \Exception('Se ha producido un error:' . $e->getMessage());
         }
     }
-
     function getReviewers($params)
     {
         $userDao = \DAORegistry::getDAO('UserDAO'); /* @var $userDao \UserDAO */
@@ -79,7 +79,8 @@ class DataReviewers extends AbstractRunner implements InterfaceRunner {
                 GROUP BY
                     u.user_id,
                     u.username,
-                    u.email;", $params
-            );
+                    u.email;",
+            $params
+        );
     }
 }

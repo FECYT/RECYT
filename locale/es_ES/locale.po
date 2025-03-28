@@ -89,3 +89,13 @@ msgstr "Exportación flujo editorial"
 
 msgid "plugins.generic.calidadfecyt.export.editorial.description"
 msgstr "Exportar flujo editorial del envío seleccionado"
+
+# Date range
+msgid "plugins.generic.calidadfecyt.dateRange"
+msgstr "Rango de fechas"
+
+msgid "plugins.generic.calidadfecyt.dateFrom"
+msgstr "Desde: "
+
+msgid "plugins.generic.calidadfecyt.dateTo"
+msgstr "Hasta: "
