@@ -7,15 +7,15 @@ use CalidadFECYT\classes\main\CalidadFECYT;
 
 class CalidadFECYTPlugin extends GenericPlugin
 {
-
     public function register($category, $path, $mainContextId = NULL)
     {
         $success = parent::register($category, $path, $mainContextId);
-        if (! Config::getVar('general', 'installed') || defined('RUNNING_UPGRADE')) {
+        if (!Config::getVar('general', 'installed') || defined('RUNNING_UPGRADE')) {
             return true;
         }
         $this->addLocaleData();
-        if ($success && $this->getEnabled()) {
+        if ($success && $this->getEnabled($mainContextId)) {
+
             return $success;
         }
         return $success;
@@ -63,61 +63,51 @@ class CalidadFECYTPlugin extends GenericPlugin
 
     public function manage($args, $request)
     {
+        error_log("manage() called with verb: " . $request->getUserVar('verb'));
         $this->import('classes.main.CalidadFECYT');
-        import('lib.pkp.classes.linkAction.request.RedirectAction');
-
         $templateMgr = TemplateManager::getManager($request);
-
         $context = $request->getContext();
         $router = $request->getRouter();
-
-        $calidadFECYT = new CalidadFECYT(array(
-            'request' => $request,
-            'context' => $context
-        ));
 
         switch ($request->getUserVar('verb')) {
             case 'settings':
                 $templateParams = array(
-                    "journalTitle" => $context->getLocalizedName()
+                    "journalTitle" => $context->getLocalizedName(),
+                    "defaultDateFrom" => date('Y-m-d', strtotime("-1 year")),
+                    "defaultDateTo" => date('Y-m-d', strtotime("-1 day")),
+                    "baseUrl" => $router->url($request, null, null, 'manage', null, array(
+                        'plugin' => $this->getName(),
+                        'category' => 'generic'
+                    ))
                 );
 
-                $exportAllAction = new LinkAction('exportAllLinkAction', new RedirectAction($router->url($request, null, null, 'manage', null, array(
-                    'verb' => 'exportAll',
-                    'plugin' => $this->getName(),
-                    'category' => 'generic',
-                )), '_self'), __('plugins.generic.calidadfecyt.export.all'), null);
-
+                $calidadFECYT = new CalidadFECYT(array('request' => $request, 'context' => $context));
                 $linkActions = array();
-
                 $index = 0;
                 foreach ($calidadFECYT->getExportClasses() as $export) {
                     $exportAction = new stdClass();
                     $exportAction->name = $export;
-                    $exportAction->linkAction = new LinkAction('export' . $export . 'LinkAction', new RedirectAction($router->url($request, null, null, 'manage', null, array(
-                        'verb' => 'export',
-                        'plugin' => $this->getName(),
-                        'category' => 'generic',
-                        'exportIndex' => $index
-                    )), '_self'), __('plugins.generic.calidadfecyt.export.' . $export), null);
-
+                    $exportAction->index = $index;
                     $linkActions[] = $exportAction;
-                    $index ++;
+                    $index++;
                 }
 
                 $templateParams['submissions'] = $this->getSubmissions($context->getId());
-                $templateParams['exportAllAction'] = $exportAllAction;
+                $templateParams['exportAllAction'] = true;
                 $templateParams['linkActions'] = $linkActions;
                 $templateMgr->assign($templateParams);
-
-                $templateMgr->assign('editorialUrl', $router->url(
-                    $request, null, null, 'manage', null, array()
-                ));
 
                 return new JSONMessage(true, $templateMgr->fetch($this->getTemplateResource('settings_form.tpl')));
             case 'export':
                 try {
                     $request->checkCSRF();
+                    $params = array(
+                        'request' => $request,
+                        'context' => $context,
+                        'dateFrom' => $request->getUserVar('dateFrom') ? date('Ymd', strtotime($request->getUserVar('dateFrom'))) : null,
+                        'dateTo' => $request->getUserVar('dateTo') ? date('Ymd', strtotime($request->getUserVar('dateTo'))) : null
+                    );
+                    $calidadFECYT = new CalidadFECYT($params);
                     $calidadFECYT->export();
                 } catch (Exception $e) {
                     $dispatcher = $request->getDispatcher();
@@ -127,6 +117,13 @@ class CalidadFECYTPlugin extends GenericPlugin
             case 'exportAll':
                 try {
                     $request->checkCSRF();
+                    $params = array(
+                        'request' => $request,
+                        'context' => $context,
+                        'dateFrom' => $request->getUserVar('dateFrom') ? date('Ymd', strtotime($request->getUserVar('dateFrom'))) : null,
+                        'dateTo' => $request->getUserVar('dateTo') ? date('Ymd', strtotime($request->getUserVar('dateTo'))) : null
+                    );
+                    $calidadFECYT = new CalidadFECYT($params);
                     $calidadFECYT->exportAll();
                 } catch (Exception $e) {
                     $dispatcher = $request->getDispatcher();
@@ -136,13 +133,20 @@ class CalidadFECYTPlugin extends GenericPlugin
             case 'editorial':
                 try {
                     $request->checkCSRF();
+                    $params = array(
+                        'request' => $request,
+                        'context' => $context,
+                        'dateFrom' => $request->getUserVar('dateFrom') ? date('Ymd', strtotime($request->getUserVar('dateFrom'))) : null,
+                        'dateTo' => $request->getUserVar('dateTo') ? date('Ymd', strtotime($request->getUserVar('dateTo'))) : null
+                    );
+                    $calidadFECYT = new CalidadFECYT($params);
                     $calidadFECYT->editorial($request->getUserVar('submission'));
                 } catch (Exception $e) {
                     $dispatcher = $request->getDispatcher();
                     $dispatcher->handle404();
                 }
                 return;
-            case 'default':
+            default:
                 $dispatcher = $request->getDispatcher();
                 $dispatcher->handle404();
                 return;
@@ -154,7 +158,7 @@ class CalidadFECYTPlugin extends GenericPlugin
     public function getSubmissions($contextId)
     {
         $locale = AppLocale::getLocale();
-        $submissionDao = \DAORegistry::getDAO('SubmissionDAO'); /* @var $submissionDao \SubmissionDAO */
+        $submissionDao = \DAORegistry::getDAO('SubmissionDAO');
         $query = $submissionDao->retrieve(
             "SELECT s.submission_id, pp_title.setting_value AS title
                 FROM submissions s
@@ -164,27 +168,25 @@ class CalidadFECYTPlugin extends GenericPlugin
                          INNER JOIN (
                     SELECT issue_id
                     FROM issues
-                    WHERE journal_id = ".$contextId."
+                    WHERE journal_id = " . $contextId . "
                       AND published = 1
                     ORDER BY date_published DESC
                     LIMIT 4
                 ) AS latest_issues ON pp_issue.setting_value = latest_issues.issue_id
                 WHERE pp_issue.setting_name = 'issueId'
                   AND pp_title.setting_name = 'title'
-                  AND pp_title.locale='".$locale."'"
+                  AND pp_title.locale='" . $locale . "'"
         );
 
         $submissions = array();
         foreach ($query as $value) {
             $row = get_object_vars($value);
             $title = $row['title'];
-
             $submissions[] = [
                 'id' => $row['submission_id'],
                 'title' => (strlen($title) > 80) ? mb_substr($title, 0, 77, 'UTF-8') . '...' : $title,
             ];
         }
-
         return $submissions;
     }
 }

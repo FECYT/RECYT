@@ -6,7 +6,8 @@ use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
 
-class Issues extends AbstractRunner implements InterfaceRunner {
+class Issues extends AbstractRunner implements InterfaceRunner
+{
 
     private $contextId;
 
@@ -15,7 +16,7 @@ class Issues extends AbstractRunner implements InterfaceRunner {
         $fileManager = new \FileManager();
         $context = $params["context"];
         $dirFiles = $params['temporaryFullFilePath'];
-        if(!$context) {
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
         $this->contextId = $context->getId();
@@ -25,13 +26,13 @@ class Issues extends AbstractRunner implements InterfaceRunner {
                 $data = $this->getData($issueItem['id']);
                 $submissions = $data['results'];
                 $countAuthors = $data['count'];
-                $volume = $issueItem['volume'] ? "Vol.".$issueItem['volume']." " : '';
-                $number = $issueItem['number'] ? "Num.".$issueItem['number']." " : '';
-                $year = $issueItem['year'] ? "(".$issueItem['year'].")" : '';
-                $nameFile = "/".$volume.$number.$year;
-                $file = fopen($dirFiles . $nameFile.".csv", "w");
+                $volume = $issueItem['volume'] ? "Vol." . $issueItem['volume'] . " " : '';
+                $number = $issueItem['number'] ? "Num." . $issueItem['number'] . " " : '';
+                $year = $issueItem['year'] ? "(" . $issueItem['year'] . ")" : '';
+                $nameFile = "/" . $volume . $number . $year;
+                $file = fopen($dirFiles . $nameFile . ".csv", "w");
 
-                if (! empty($data['results'])) {
+                if (!empty($data['results'])) {
                     $columns = ["Sección", "Título"];
                     for ($a = 1; $a <= $countAuthors; $a++) {
                         $columns = array_merge($columns, [
@@ -64,7 +65,7 @@ class Issues extends AbstractRunner implements InterfaceRunner {
                 fclose($file);
             }
 
-            if(!isset($params['exportAll'])) {
+            if (!isset($params['exportAll'])) {
                 $zipFilename = $dirFiles . '/issues.zip';
                 ZipUtils::zip([], [$dirFiles], $zipFilename);
                 $fileManager->downloadByPath($zipFilename);
@@ -96,18 +97,18 @@ class Issues extends AbstractRunner implements InterfaceRunner {
             $results[] = [
                 'title' => $submission->getCurrentPublication()->getLocalizedData('title'),
                 'section' => $section->getData('hideTitle') ? '' : $section->getLocalizedData('title'),
-                'authors' => array_map(function($author) {
-                $userGroupDao = \DAORegistry::getDAO('UserGroupDAO'); /* @var $userGroupDao \UserGroupDAO */
-                $userGroup = $userGroupDao->getById($author->getData('userGroupId'))->getLocalizedData('name');
+                'authors' => array_map(function ($author) {
+                    $userGroupDao = \DAORegistry::getDAO('UserGroupDAO'); /* @var $userGroupDao \UserGroupDAO */
+                    $userGroup = $userGroupDao->getById($author->getData('userGroupId'))->getLocalizedData('name');
 
-                return [
-                    'givenName' => $author->getLocalizedGivenName(),
-                    'familyName' => $author->getLocalizedFamilyName(),
-                    'affiliation' => $author->getLocalizedData('affiliation'),
-                    'userGroup' => $userGroup ?? ''
-                ];
+                    return [
+                        'givenName' => $author->getLocalizedGivenName(),
+                        'familyName' => $author->getLocalizedFamilyName(),
+                        'affiliation' => $author->getLocalizedData('affiliation'),
+                        'userGroup' => $userGroup ?? ''
+                    ];
                 }, $publication->getData('authors'))
-                ];
+            ];
         }
 
         return array(
@@ -123,11 +124,11 @@ class Issues extends AbstractRunner implements InterfaceRunner {
         $query = $issueDao->retrieve(
             "SELECT issue_id as id, volume, year, number
             FROM issues
-            WHERE journal_id = ".$this->contextId."
+            WHERE journal_id = " . $this->contextId . "
             AND published = 1
             ORDER BY date_published DESC
             LIMIT 4"
-            );
+        );
 
         while ($query->valid()) {
             $row = get_object_vars($query->current());

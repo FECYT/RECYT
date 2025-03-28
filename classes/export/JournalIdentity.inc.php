@@ -6,7 +6,8 @@ use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\HTTPUtils;
 
-class JournalIdentity extends AbstractRunner implements InterfaceRunner {
+class JournalIdentity extends AbstractRunner implements InterfaceRunner
+{
 
     private $contextId;
 
@@ -14,7 +15,7 @@ class JournalIdentity extends AbstractRunner implements InterfaceRunner {
     {
         $context = $params["context"];
         $dirFiles = $params['temporaryFullFilePath'];
-        if(!$context) {
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
         $this->contextId = $context->getId();
@@ -28,8 +29,8 @@ class JournalIdentity extends AbstractRunner implements InterfaceRunner {
 
 
 
-            if(isset($params['exportAll'])) {
-                $file = fopen($dirFiles ."/identidad.txt", "w");
+            if (isset($params['exportAll'])) {
+                $file = fopen($dirFiles . "/identidad.txt", "w");
                 fwrite($file, $text);
                 fclose($file);
             } else {
