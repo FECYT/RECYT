@@ -33,7 +33,7 @@ class CountArticles extends AbstractRunner implements InterfaceRunner
       );
 
 
-      $data = "Nº de artículos para la revista " . \Application::getJournalDAO()->getById($this->contextId)->getPath();
+      $data = "Nº de artículos para la revista " . \Application::getContextDAO()->getById($this->contextId)->getPath();
       $data .= " desde el " . date('d-m-Y', strtotime($dateFrom)) . " hasta el " . date('d-m-Y', strtotime($dateTo)) . "\n";
       $data .= "Recibidos: " . $this->countSubmissionsReceived($submissionDao, $params2) . "\n";
       $data .= "Aceptados: " . $this->countSubmissionsAccepted($submissionDao, $params2) . "\n";

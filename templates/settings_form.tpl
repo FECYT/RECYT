@@ -7,10 +7,11 @@
 	<br />
 
 	<form id="exportForm" method="get" action="{$baseUrl|escape}">
-		<input type="hidden" name="verb" value="">
 		<input type="hidden" name="plugin" value="CalidadFECYTPlugin">
 		<input type="hidden" name="category" value="generic">
+		<input type="hidden" name="verb" id="verb" value="">
 		<input type="hidden" name="exportIndex" id="exportIndex" value="">
+
 		<fieldset class="pkpFormField pkpFormField--options">
 			<legend>{translate key="plugins.generic.calidadfecyt.dateRange"}</legend>
 			<label for="dateFrom">{translate key="plugins.generic.calidadfecyt.dateFrom"}</label>
@@ -32,7 +33,7 @@
 					{translate key="plugins.generic.calidadfecyt.exportAll.description"}
 				</legend>
 				<button id="exportAllButton" type="submit" class="pkpButton"
-					onclick="document.getElementById('exportForm').verb.value='exportAll';">
+					onclick="document.getElementById('verb').value='exportAll';">
 					{translate key="plugins.generic.calidadfecyt.exportAll"}
 				</button>
 			</fieldset>
@@ -52,7 +53,7 @@
 						{translate key="plugins.generic.calidadfecyt.export."|cat:$exportAction->name|cat:".description"}
 					</legend>
 					<button id="{$exportAction->name|cat:'Button'}" type="submit" class="pkpButton"
-						onclick="document.getElementById('exportForm').verb.value='export'; document.getElementById('exportIndex').value='{$exportAction->index}';">
+						onclick="document.getElementById('verb').value='export'; document.getElementById('exportIndex').value='{$exportAction->index}';">
 						{translate key="plugins.generic.calidadfecyt.export."|cat:$exportAction->name}
 					</button>
 				</fieldset>
@@ -77,7 +78,7 @@
 			</select>
 			<br />
 			<button id="editorialButton" type="submit" class="pkpButton"
-				onclick="document.getElementById('exportForm').verb.value='editorial';">
+				onclick="document.getElementById('verb').value='editorial';">
 				{translate key="plugins.generic.calidadfecyt.export.editorial"}
 			</button>
 		</fieldset>
@@ -87,7 +88,8 @@
 		document.getElementById('exportForm').addEventListener('submit', function(e) {
 			e.preventDefault();
 			var form = this;
-			var url = '{$baseUrl|escape}?' + new URLSearchParams(new FormData(form)).toString();
+			var params = new URLSearchParams(new FormData(form)).toString();
+			var url = form.action + '?' + params;
 			window.location.href = url;
 		});
 	</script>
