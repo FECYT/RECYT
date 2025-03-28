@@ -5,266 +5,257 @@ namespace CalidadFECYT\classes\export;
 use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
+use PKP\file\FileManager;
+use PKP\core\PKPApplication;
+use APP\facades\Repo;
+use PKP\submission\PKPSubmission;
+use APP\decision\Decision;
+use APP\i18n\AppLocale;
 
-class CountArticles extends AbstractRunner implements InterfaceRunner {
-
-    private $contextId;
+class CountArticles extends AbstractRunner implements InterfaceRunner
+{
+    private int $contextId;
 
     public function run(&$params)
     {
-        $fileManager = new \FileManager();
-        $context = $params["context"];
-        $dirFiles = $params['temporaryFullFilePath'];
-        if(!$context) {
+        $fileManager = new FileManager();
+        $context = $params["context"] ?? null;
+        $dirFiles = $params['temporaryFullFilePath'] ?? '';
+
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
+
         $this->contextId = $context->getId();
 
         try {
-            $submissionDao = \DAORegistry::getDAO('SubmissionDAO'); /* @var $submissionDao \SubmissionDAO */
             $dateTo = date('Ymd', strtotime("-1 day"));
             $dateFrom = date("Ymd", strtotime("-1 year", strtotime($dateTo)));
 
-            $params2 = array($this->contextId, $dateFrom, $dateTo);
-            $paramsPublished = array(
+            $params2 = [$this->contextId, $dateFrom, $dateTo];
+            $paramsPublished = [
                 $this->contextId,
                 date('Y-m-d', strtotime($dateFrom)),
                 date('Y-m-d', strtotime($dateTo)),
-            );
+            ];
 
-            $data = "Nº de artículos para la revista ".\Application::getContextDAO()->getById($this->contextId)->getPath();
-            $data .= " desde el ".date('d-m-Y', strtotime($dateFrom))." hasta el ".date('d-m-Y', strtotime($dateTo))."\n";
-            $data .= "Recibidos: ".$this->countSubmissionsReceived($submissionDao, $params2)."\n";
-            $data .= "Aceptados: ".$this->countSubmissionsAccepted($submissionDao, $params2)."\n";
-            $data .= "Rechazados: ".$this->countSubmissionsDeclined($submissionDao, $params2)."\n";
-            $data .= "Publicados: ".$this->countSubmissionsPublished($submissionDao, $paramsPublished);
+            $data = "Nº de artículos para la revista " . PKPApplication::get()->getContextDAO()->getById($this->contextId)?->getPath();
+            $data .= " desde el " . date('d-m-Y', strtotime($dateFrom)) . " hasta el " . date('d-m-Y', strtotime($dateTo)) . "\n";
+            $data .= "Recibidos: " . $this->countSubmissionsReceived($params2) . "\n";
+            $data .= "Aceptados: " . $this->countSubmissionsAccepted($params2) . "\n";
+            $data .= "Rechazados: " . $this->countSubmissionsDeclined($params2) . "\n";
+            $data .= "Publicados: " . $this->countSubmissionsPublished($paramsPublished);
 
-            $file = fopen($dirFiles . "/numero_articulos.txt", "w");
-            fwrite($file, $data);
-            fclose($file);
+            $filePath = $dirFiles . "/numero_articulos.txt";
+            file_put_contents($filePath, $data);
 
-            $this->generateCsv($this->getSubmissionsReceived($submissionDao, $params2), 'recibidos', $dirFiles);
-            $this->generateCsv($this->getSubmissionsAccepted($submissionDao, $params2), 'aceptados', $dirFiles);
-            $this->generateCsv($this->getSubmissionsDeclined($submissionDao, $params2), 'rechazados', $dirFiles);
-            $this->generateCsv($this->getSubmissionsPublished($submissionDao, $paramsPublished), 'publicados', $dirFiles);
+            $this->generateCsv($this->getSubmissionsReceived($params2), 'recibidos', $dirFiles);
+            $this->generateCsv($this->getSubmissionsAccepted($params2), 'aceptados', $dirFiles);
+            $this->generateCsv($this->getSubmissionsDeclined($params2), 'rechazados', $dirFiles);
+            $this->generateCsv($this->getSubmissionsPublished($paramsPublished), 'publicados', $dirFiles);
 
-            if(!isset($params['exportAll'])) {
+            if (!isset($params['exportAll'])) {
                 $zipFilename = $dirFiles . '/countArticles.zip';
                 ZipUtils::zip([], [$dirFiles], $zipFilename);
                 $fileManager->downloadByPath($zipFilename);
             }
         } catch (\Exception $e) {
-            throw new \Exception('Se ha producido un error:' . $e->getMessage());
+            throw new \Exception('Se ha producido un error: ' . $e->getMessage());
         }
     }
 
-    public function generateCsv($query, $key, $dirFiles)
+    private function generateCsv(iterable $submissions, string $key, string $dirFiles): void
     {
-        if ($query) {
-            $publicationDao = \DAORegistry::getDAO('PublicationDAO'); /* @var $publicationDao \PublicationDAO */
-
-            $file = fopen($dirFiles . "/envios_".$key.".csv", "w");
-            fputcsv($file, array("ID", "Fecha", "Título"));
-
-            foreach ($query as $value) {
-                $row = get_object_vars($value);
-                $publication = $publicationDao->getById($row['pub']);
-
-                fputcsv($file, array(
-                    $row['id'],
-                    date("Y-m-d", strtotime($row['date'])),
-                    $publication->getLocalizedData('title', \AppLocale::getLocale()),
-                ));
-            }
-            fclose($file);
+        if (empty($submissions)) {
+            return;
         }
+
+        $filePath = $dirFiles . "/envios_" . $key . ".csv";
+        $file = fopen($filePath, 'w');
+
+        fputcsv($file, ["ID", "Fecha", "Título"]);
+
+        foreach ($submissions as $submission) {
+            $publication = $submission->getCurrentPublication();
+            $date = $key === 'recibidos' ? $submission->getData('dateSubmitted') :
+                ($key === 'publicados' ? $publication?->getData('datePublished') : $submission->getData('dateLastActivity'));
+
+            fputcsv($file, [
+                $submission->getId(),
+                date("Y-m-d", strtotime($date)),
+                $publication?->getLocalizedData('title', AppLocale::getLocale()) ?? '',
+            ]);
+        }
+        fclose($file);
     }
 
-    public function countSubmissionsReceived($submissionDao, $params)
+    private function countSubmissionsReceived(array $params): int
     {
-        $result = $submissionDao->retrieve(
-            "SELECT COUNT(DISTINCT s.submission_id) AS count
-	        FROM submissions s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = ".STATUS_PUBLISHED."
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.date_submitted >= ?
-              AND s.date_submitted <= ?", $params
-            )->current();
+        $collector = Repo::submission()
+            ->getCollector()
+            ->filterByContextIds([$params[0]])
+            ->filterByStatus([PKPSubmission::STATUS_QUEUED]);
 
-        return $result->count;
+        $query = $collector->getQueryBuilder()
+            ->where('po.status', '=', PKPSubmission::STATUS_PUBLISHED)
+            ->where(function ($q) {
+                $q->whereNull('po.date_published')
+                    ->orWhere('s.date_submitted', '<', 'po.date_published');
+            })
+            ->where('s.date_submitted', '>=', $params[1])
+            ->where('s.date_submitted', '<=', $params[2]);
+
+        return $collector->getCount($query);
     }
 
-    public function getSubmissionsReceived($submissionDao, $params)
+    private function getSubmissionsReceived(array $params): iterable
     {
-        return $submissionDao->retrieve(
-            "SELECT DISTINCT s.submission_id as id, s.date_submitted as date, s.current_publication_id as pub
-	        FROM submissions s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = ".STATUS_PUBLISHED."
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.date_submitted >= ?
-              AND s.date_submitted <= ?
-            GROUP BY s.submission_id, s.date_submitted, s.current_publication_id", $params
-        );
+        $collector = Repo::submission()
+            ->getCollector()
+            ->filterByContextIds([$params[0]])
+            ->filterByStatus([PKPSubmission::STATUS_QUEUED]);
+
+        $query = $collector->getQueryBuilder()
+            ->where('po.status', '=', PKPSubmission::STATUS_PUBLISHED)
+            ->where(function ($q) {
+                $q->whereNull('po.date_published')
+                    ->orWhere('s.date_submitted', '<', 'po.date_published');
+            })
+            ->where('s.date_submitted', '>=', $params[1])
+            ->where('s.date_submitted', '<=', $params[2]);
+
+        return $collector->getMany($query);
     }
 
-    public function countSubmissionsAccepted($submissionDao, $params)
+    private function countSubmissionsAccepted(array $params): int
     {
-        $result = $submissionDao->retrieve(
-            "SELECT COUNT(DISTINCT s.submission_id) AS count
-            FROM submissions as s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = ".STATUS_PUBLISHED."
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status != ".STATUS_DECLINED."
-              AND ed.decision = 1
-              AND ed.date_decided >= ?
-              AND ed.date_decided <= ?", $params
-            )->current();
+        $collector = Repo::submission()
+            ->getCollector()
+            ->filterByContextIds([$params[0]])
+            ->filterByStatus([PKPSubmission::STATUS_QUEUED]);
 
-            return $result->count;
+        $query = $collector->getQueryBuilder()
+            ->where('po.status', '=', PKPSubmission::STATUS_PUBLISHED)
+            ->where(function ($q) {
+                $q->whereNull('po.date_published')
+                    ->orWhere('s.date_submitted', '<', 'po.date_published');
+            })
+            ->join('edit_decisions as ed', 'ed.submission_id', '=', 's.submission_id')
+            ->where('ed.decision', Decision::ACCEPT)
+            ->where('ed.date_decided', '>=', $params[1])
+            ->where('ed.date_decided', '<=', $params[2])
+            ->distinct('s.submission_id');
+
+        return $collector->getCount($query);
     }
 
-    public function getSubmissionsAccepted($submissionDao, $params)
+    private function getSubmissionsAccepted(array $params): iterable
     {
-        return $submissionDao->retrieve(
-            "SELECT DISTINCT s.submission_id as id, ed.date_decided as date, s.current_publication_id as pub
-            FROM submissions as s
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = ".STATUS_PUBLISHED."
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status != ".STATUS_DECLINED."
-              AND ed.decision = 1
-              AND ed.date_decided >= ?
-              AND ed.date_decided <= ?
-            GROUP BY s.submission_id, ed.date_decided, s.current_publication_id", $params
-        );
+        $collector = Repo::submission()
+            ->getCollector()
+            ->filterByContextIds([$params[0]])
+            ->filterByStatus([PKPSubmission::STATUS_QUEUED]);
+
+        $query = $collector->getQueryBuilder()
+            ->where('po.status', '=', PKPSubmission::STATUS_PUBLISHED)
+            ->where(function ($q) {
+                $q->whereNull('po.date_published')
+                    ->orWhere('s.date_submitted', '<', 'po.date_published');
+            })
+            ->join('edit_decisions as ed', 'ed.submission_id', '=', 's.submission_id')
+            ->where('ed.decision', Decision::ACCEPT)
+            ->where('ed.date_decided', '>=', $params[1])
+            ->where('ed.date_decided', '<=', $params[2])
+            ->distinct('s.submission_id');
+
+        return $collector->getMany($query);
     }
 
-    public function countSubmissionsDeclined($submissionDao, $params)
+    private function countSubmissionsDeclined(array $params): int
     {
-        $result = $submissionDao->retrieve(
-            "SELECT COUNT(DISTINCT s.submission_id) as count
-            FROM submissions as s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = ".STATUS_PUBLISHED."
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status = ".STATUS_DECLINED."
-              AND ed.decision IN(4,9)
-              AND ed.date_decided >= ?
-              AND ed.date_decided <= ?", $params
-            )->current();
+        $collector = Repo::submission()
+            ->getCollector()
+            ->filterByContextIds([$params[0]])
+            ->filterByStatus([PKPSubmission::STATUS_DECLINED]);
 
-            return $result->count;
+        $query = $collector->getQueryBuilder()
+            ->where('po.status', '=', PKPSubmission::STATUS_PUBLISHED)
+            ->where(function ($q) {
+                $q->whereNull('po.date_published')
+                    ->orWhere('s.date_submitted', '<', 'po.date_published');
+            })
+            ->join('edit_decisions as ed', 'ed.submission_id', '=', 's.submission_id')
+            ->whereIn('ed.decision', [
+                Decision::DECLINE,
+                Decision::INITIAL_DECLINE
+            ])
+            ->where('ed.date_decided', '>=', $params[1])
+            ->where('ed.date_decided', '<=', $params[2])
+            ->distinct('s.submission_id');
+
+        return $collector->getCount($query);
     }
 
-    public function getSubmissionsDeclined($submissionDao, $params)
+    private function getSubmissionsDeclined(array $params): iterable
     {
-        return $submissionDao->retrieve(
-            "SELECT DISTINCT s.submission_id as id, ed.date_decided as date, s.current_publication_id as pub
-            FROM submissions as s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = ".STATUS_PUBLISHED."
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status = ".STATUS_DECLINED."
-              AND ed.decision IN(4,9)
-              AND ed.date_decided >= ?
-              AND ed.date_decided <= ?
-            GROUP BY s.submission_id, ed.date_decided, s.current_publication_id", $params
-        );
+        $collector = Repo::submission()
+            ->getCollector()
+            ->filterByContextIds([$params[0]])
+            ->filterByStatus([PKPSubmission::STATUS_DECLINED]);
+
+        $query = $collector->getQueryBuilder()
+            ->where('po.status', '=', PKPSubmission::STATUS_PUBLISHED)
+            ->where(function ($q) {
+                $q->whereNull('po.date_published')
+                    ->orWhere('s.date_submitted', '<', 'po.date_published');
+            })
+            ->join('edit_decisions as ed', 'ed.submission_id', '=', 's.submission_id')
+            ->whereIn('ed.decision', [
+                Decision::DECLINE,
+                Decision::INITIAL_DECLINE
+            ])
+            ->where('ed.date_decided', '>=', $params[1])
+            ->where('ed.date_decided', '<=', $params[2])
+            ->distinct('s.submission_id');
+
+        return $collector->getMany($query);
     }
 
-    public function countSubmissionsPublished($submissionDao, $params)
+    private function countSubmissionsPublished(array $params): int
     {
-        $result = $submissionDao->retrieve(
-            "SELECT COUNT(DISTINCT s.submission_id) as count
-            FROM submissions as s
-            LEFT JOIN publications as p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = ".STATUS_PUBLISHED."
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status = ".STATUS_PUBLISHED."
-              AND p.date_published >= ?
-              AND p.date_published <= ?", $params
-            )->current();
+        $collector = Repo::submission()
+            ->getCollector()
+            ->filterByContextIds([$params[0]])
+            ->filterByStatus([PKPSubmission::STATUS_PUBLISHED]);
 
-            return $result->count;
+        $query = $collector->getQueryBuilder()
+            ->where('po.status', '=', PKPSubmission::STATUS_PUBLISHED)
+            ->where(function ($q) {
+                $q->whereNull('po.date_published')
+                    ->orWhere('s.date_submitted', '<', 'po.date_published');
+            })
+            ->where('po.date_published', '>=', $params[1])
+            ->where('po.date_published', '<=', $params[2]);
+
+        return $collector->getCount($query);
     }
 
-
-    public function getSubmissionsPublished($submissionDao, $params)
+    private function getSubmissionsPublished(array $params): iterable
     {
-        return $submissionDao->retrieve(
-            "SELECT DISTINCT s.submission_id as id, p.date_published as date, s.current_publication_id as pub
-            FROM submissions as s
-            LEFT JOIN publications as p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = ".STATUS_PUBLISHED."
-                LIMIT 1)
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status = ".STATUS_PUBLISHED."
-              AND p.date_published >= ?
-              AND p.date_published <= ?
-            GROUP BY s.submission_id, p.date_published, s.current_publication_id", $params
-        );
+        $collector = Repo::submission()
+            ->getCollector()
+            ->filterByContextIds([$params[0]])
+            ->filterByStatus([PKPSubmission::STATUS_PUBLISHED]);
+
+        $query = $collector->getQueryBuilder()
+            ->where('po.status', '=', PKPSubmission::STATUS_PUBLISHED)
+            ->where(function ($q) {
+                $q->whereNull('po.date_published')
+                    ->orWhere('s.date_submitted', '<', 'po.date_published');
+            })
+            ->where('po.date_published', '>=', $params[1])
+            ->where('po.date_published', '<=', $params[2]);
+
+        return $collector->getMany($query);
     }
 }

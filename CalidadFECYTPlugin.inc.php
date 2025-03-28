@@ -4,14 +4,16 @@ require_once(__DIR__ . '/vendor/autoload.php');
 import('lib.pkp.classes.plugins.GenericPlugin');
 
 use CalidadFECYT\classes\main\CalidadFECYT;
-
+use APP\i18n\AppLocale;
+use PKP\core\JSONMessage;
+use Illuminate\Support\Facades\DB;
 class CalidadFECYTPlugin extends GenericPlugin
 {
 
     public function register($category, $path, $mainContextId = NULL)
     {
         $success = parent::register($category, $path, $mainContextId);
-        if (! Config::getVar('general', 'installed') || defined('RUNNING_UPGRADE')) {
+        if (!Config::getVar('general', 'installed') || defined('RUNNING_UPGRADE')) {
             return true;
         }
         $this->addLocaleData();
@@ -21,17 +23,6 @@ class CalidadFECYTPlugin extends GenericPlugin
         return $success;
     }
 
-    public function addLocaleData($locale = null)
-    {
-        $locale = $locale ?? AppLocale::getLocale();
-        if ($localeFilenames = $this->getLocaleFilename($locale)) {
-            foreach ((array) $localeFilenames as $localeFilename) {
-                AppLocale::registerLocaleFile($locale, $localeFilename);
-            }
-            return true;
-        }
-        return false;
-    }
 
     public function getName()
     {
@@ -102,7 +93,7 @@ class CalidadFECYTPlugin extends GenericPlugin
                     )), '_self'), __('plugins.generic.calidadfecyt.export.' . $export), null);
 
                     $linkActions[] = $exportAction;
-                    $index ++;
+                    $index++;
                 }
 
                 $templateParams['submissions'] = $this->getSubmissions($context->getId());
@@ -111,7 +102,12 @@ class CalidadFECYTPlugin extends GenericPlugin
                 $templateMgr->assign($templateParams);
 
                 $templateMgr->assign('editorialUrl', $router->url(
-                    $request, null, null, 'manage', null, array()
+                    $request,
+                    null,
+                    null,
+                    'manage',
+                    null,
+                    array()
                 ));
 
                 return new JSONMessage(true, $templateMgr->fetch($this->getTemplateResource('settings_form.tpl')));
@@ -154,33 +150,35 @@ class CalidadFECYTPlugin extends GenericPlugin
     public function getSubmissions($contextId)
     {
         $locale = AppLocale::getLocale();
-        $submissionDao = \DAORegistry::getDAO('SubmissionDAO'); /* @var $submissionDao \SubmissionDAO */
-        $query = $submissionDao->retrieve(
-            "SELECT s.submission_id, pp_title.setting_value AS title
-                FROM submissions s
-                         INNER JOIN publications p ON p.publication_id = s.current_publication_id
-                         INNER JOIN publication_settings pp_issue ON p.publication_id = pp_issue.publication_id
-                         INNER JOIN publication_settings pp_title ON p.publication_id = pp_title.publication_id
-                         INNER JOIN (
-                    SELECT issue_id
-                    FROM issues
-                    WHERE journal_id = ".$contextId."
-                      AND published = 1
-                    ORDER BY date_published DESC
-                    LIMIT 4
-                ) AS latest_issues ON pp_issue.setting_value = latest_issues.issue_id
-                WHERE pp_issue.setting_name = 'issueId'
-                  AND pp_title.setting_name = 'title'
-                  AND pp_title.locale='".$locale."'"
-        );
 
-        $submissions = array();
-        foreach ($query as $value) {
-            $row = get_object_vars($value);
-            $title = $row['title'];
+        $results = DB::table('submissions as s')
+            ->select('s.submission_id', 'pp_title.setting_value as title')
+            ->join('publications as p', 'p.publication_id', '=', 's.current_publication_id')
+            ->join('publication_settings as pp_issue', 'p.publication_id', '=', 'pp_issue.publication_id')
+            ->where('p.status', '=', 3)
+            ->join('publication_settings as pp_title', 'p.publication_id', '=', 'pp_title.publication_id')
+            ->joinSub(
+                DB::table('issues')
+                    ->select('issue_id')
+                    ->where('journal_id', $contextId)
+                    ->where('published', 1)
+                    ->orderBy('date_published', 'desc')
+                    ->limit(4),
+                'latest_issues',
+                function ($join) {
+                    $join->on('pp_issue.setting_value', '=', 'latest_issues.issue_id');
+                }
+            )
+            ->where('pp_issue.setting_name', 'issueId')
+            ->where('pp_title.setting_name', 'title')
+            ->where('pp_title.locale', $locale)
+            ->get();
 
+        $submissions = [];
+        foreach ($results as $row) {
+            $title = $row->title;
             $submissions[] = [
-                'id' => $row['submission_id'],
+                'id' => $row->submission_id,
                 'title' => (strlen($title) > 80) ? mb_substr($title, 0, 77, 'UTF-8') . '...' : $title,
             ];
         }

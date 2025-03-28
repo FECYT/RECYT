@@ -5,81 +5,91 @@ namespace CalidadFECYT\classes\export;
 use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
+use PKP\file\FileManager;
+use PKP\core\PKPApplication;
+use APP\facades\Repo;
+use PKP\submission\PKPSubmission;
+use APP\i18n\AppLocale;
 
-class DataAuthors extends AbstractRunner implements InterfaceRunner {
-
-    private $contextId;
+class DataAuthors extends AbstractRunner implements InterfaceRunner
+{
+    private int $contextId;
 
     public function run(&$params)
     {
-        $fileManager = new \FileManager();
-        $context = $params["context"];
-        $dirFiles = $params['temporaryFullFilePath'];
-        if(!$context) {
+        $fileManager = new FileManager();
+        $context = $params["context"] ?? null;
+        $dirFiles = $params['temporaryFullFilePath'] ?? '';
+
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
+
         $this->contextId = $context->getId();
 
         try {
             $dateTo = date('Ymd', strtotime("-1 day"));
             $dateFrom = date("Ymd", strtotime("-1 year", strtotime($dateTo)));
-            $locale = \AppLocale::getLocale();
+            $locale = AppLocale::getLocale();
 
-            $file = fopen($dirFiles . "/autores_".$dateFrom."_".$dateTo.".csv", "w");
-            fputcsv($file, array("ID envío", "ID author", "Nombre", "Apellidos", "Institución", "Correo electrónico"));
+            $file = fopen($dirFiles . "/autores_" . $dateFrom . "_" . $dateTo . ".csv", "w");
+            fputcsv($file, ["ID envío", "ID author", "Nombre", "Apellidos", "Institución", "Correo electrónico"]);
 
-            $submissions = $this->getSubmissions(array($this->contextId, $dateFrom, $dateTo));
-            foreach ($submissions as $value) {
-                $submissionItem = get_object_vars($value);
-                $submissionDao = \DAORegistry::getDAO('SubmissionDAO'); /* @var $submissionDao \SubmissionDAO */
-                $submission = $submissionDao->getById($submissionItem['id']);
-                $authors = $submission->getAuthors();
+            $submissions = $this->getSubmissions([$this->contextId, $dateFrom, $dateTo]);
 
-                foreach ($authors as $author) {
-                    fputcsv($file, array(
-                        $submissionItem['id'],
-                        $author->getId(),
-                        $author->getData('givenName')[$locale],
-                        $author->getData('familyName')[$locale],
-                        $author->getData('affiliation')[$locale],
-                        $author->getData('email'),
-                    ));
+            foreach ($submissions as $submission) {
+
+
+                $publicationId = $submission->getData('currentPublicationId');
+                if ($publicationId) {
+                    $authors = Repo::author()
+                        ->getCollector()
+                        ->filterByPublicationIds([$publicationId])
+                        ->getMany();
+
+                    foreach ($authors as $author) {
+
+                        fputcsv($file, [
+                            $submission->getId(),
+                            $author->getId(),
+                            $author->getData('givenName', $locale) ?? '',
+                            $author->getData('familyName', $locale) ?? '',
+                            $author->getData('affiliation', $locale) ?? '',
+                            $author->getData('email') ?? '',
+                        ]);
+                    }
                 }
             }
 
             fclose($file);
 
-            if(!isset($params['exportAll'])) {
+            if (!isset($params['exportAll'])) {
                 $zipFilename = $dirFiles . '/dataAuthors.zip';
                 ZipUtils::zip([], [$dirFiles], $zipFilename);
                 $fileManager->downloadByPath($zipFilename);
             }
         } catch (\Exception $e) {
-            throw new \Exception('Se ha producido un error:' . $e->getMessage());
+            throw new \Exception('Se ha producido un error: ' . $e->getMessage());
         }
     }
 
-    public function getSubmissions($params)
+    public function getSubmissions(array $params): iterable
     {
-        $submissionDao = \DAORegistry::getDAO('SubmissionDAO'); /* @var $submissionDao \SubmissionDAO */
+        $collector = Repo::submission()
+            ->getCollector()
+            ->filterByContextIds([$params[0]])
+            ->filterByStatus([PKPSubmission::STATUS_QUEUED]);
 
-        return $submissionDao->retrieve(
-            "SELECT DISTINCT s.submission_id as id
-	        FROM submissions s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = ".STATUS_PUBLISHED."
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.date_submitted >= ?
-              AND s.date_submitted <= ?
-            GROUP BY s.submission_id", $params
-            );
+        $query = $collector->getQueryBuilder()
+            ->where('po.status', '=', PKPSubmission::STATUS_PUBLISHED)
+            ->where(function ($q) {
+                $q->whereNull('po.date_published')
+                    ->orWhere('s.date_submitted', '<', 'po.date_published');
+            })
+            ->where('s.date_submitted', '>=', $params[1])
+            ->where('s.date_submitted', '<=', $params[2])
+            ->distinct('s.submission_id');
+
+        return $collector->getMany($query);
     }
-
 }

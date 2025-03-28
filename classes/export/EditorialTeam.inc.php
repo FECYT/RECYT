@@ -5,16 +5,19 @@ namespace CalidadFECYT\classes\export;
 use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\HTTPUtils;
+use APP\i18n\AppLocale;
 
-class EditorialTeam extends AbstractRunner implements InterfaceRunner {
+class EditorialTeam extends AbstractRunner implements InterfaceRunner
+{
 
     private $contextId;
 
     public function run(&$params)
     {
+
         $context = $params["context"];
         $dirFiles = $params['temporaryFullFilePath'];
-        if(!$context) {
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
         $this->contextId = $context->getId();
@@ -22,7 +25,7 @@ class EditorialTeam extends AbstractRunner implements InterfaceRunner {
         try {
             $withoutTags = strip_tags($context->getData('editorialTeam', \AppLocale::getLocale()));
 
-            if(isset($params['exportAll'])) {
+            if (isset($params['exportAll'])) {
                 file_put_contents($dirFiles . '/equipos.txt', $withoutTags);
             } else {
                 HTTPUtils::sendStringAsFile($withoutTags, "text/plain", "equipos.txt");

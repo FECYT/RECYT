@@ -6,7 +6,8 @@ use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\HTTPUtils;
 
-class URLs extends AbstractRunner implements InterfaceRunner {
+class URLs extends AbstractRunner implements InterfaceRunner
+{
 
     private $contextId;
 
@@ -15,7 +16,7 @@ class URLs extends AbstractRunner implements InterfaceRunner {
         $context = $params["context"];
         $request = $params["request"];
         $dirFiles = $params['temporaryFullFilePath'];
-        if(!$context) {
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
         $this->contextId = $context->getId();
@@ -27,10 +28,10 @@ class URLs extends AbstractRunner implements InterfaceRunner {
             $text = "Home\n" . $dispatcher->url($request, ROUTE_PAGE, null, 'index', null, null) . "\n\n";
             $text .= "Equipo editorial\n" . $dispatcher->url($request, ROUTE_PAGE, null, 'about', 'editorialTeam') . "\n\n";
             $text .= "Envíos\n" . $dispatcher->url($request, ROUTE_PAGE, null, 'about', 'submissions') . "\n\n";
-            $text .= "Proceso editorial, periodicidad, politica, ética, preservación\n". $dispatcher->url($request, ROUTE_PAGE, null, 'about');
+            $text .= "Proceso editorial, periodicidad, politica, ética, preservación\n" . $dispatcher->url($request, ROUTE_PAGE, null, 'about');
 
-            if(isset($params['exportAll'])) {
-                $file = fopen($dirFiles ."/urls.txt", "w");
+            if (isset($params['exportAll'])) {
+                $file = fopen($dirFiles . "/urls.txt", "w");
                 fwrite($file, $text);
                 fclose($file);
             } else {

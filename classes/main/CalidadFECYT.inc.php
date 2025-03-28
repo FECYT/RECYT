@@ -45,7 +45,8 @@ class CalidadFECYT
         $this->params = $params;
     }
 
-    public function getExportClasses() {
+    public function getExportClasses()
+    {
         return $this->exportClasses;
     }
 
@@ -61,19 +62,19 @@ class CalidadFECYT
             $exportIndex = $request->getUserVar('exportIndex');
             $exportClass = $this->exportClasses[$exportIndex];
 
-            $exporter = new \ReflectionClass("CalidadFECYT\\classes\\export\\" .$exportClass);
-            if($exporter != null) {
+            $exporter = new \ReflectionClass("CalidadFECYT\\classes\\export\\" . $exportClass);
+            if ($exporter != null) {
                 $exporterInstance = $exporter->newInstanceArgs(array());
 
                 $tempDirectoryName = FileUtils::filterFilename($context->getId() . '_' . $timestamp . '_' . $exportClass);
                 $this->params['timestamp'] = $timestamp;
                 $this->params['temporaryFullFilePath'] = OJS_FILES_TEMPORARY_DIRECTORY . '/' . $tempDirectoryName;
 
-                if(!$fileManager->fileExists($this->params['temporaryFullFilePath'])) {
+                if (!$fileManager->fileExists($this->params['temporaryFullFilePath'])) {
                     $fileManager->mkdirtree($this->params['temporaryFullFilePath']);
                 }
 
-                if($exporterInstance != null && $exporterInstance instanceof InterfaceRunner ) {
+                if ($exporterInstance != null && $exporterInstance instanceof InterfaceRunner) {
                     $exporterInstance->run($this->params);
                 } else {
                     throw new \Exception("Null or unexpected class: " . $exportClass);
@@ -87,9 +88,11 @@ class CalidadFECYT
             LogUtils::log($e->getTraceAsString());
             throw $e;
         } finally {
-            if($this->params['temporaryFullFilePath'] != null
-                && $fileManager->fileExists($this->params['temporaryFullFilePath'])) {
-                    $fileManager->rmtree($this->params['temporaryFullFilePath']);
+            if (
+                $this->params['temporaryFullFilePath'] != null
+                && $fileManager->fileExists($this->params['temporaryFullFilePath'])
+            ) {
+                $fileManager->rmtree($this->params['temporaryFullFilePath']);
             }
         }
     }
@@ -109,16 +112,16 @@ class CalidadFECYT
             $this->params['temporaryFullFilePath'] = OJS_FILES_TEMPORARY_DIRECTORY . '/' . $tempDirectoryName;
             $this->params['exportAll'] = true;
 
-            if(!$fileManager->fileExists($this->params['temporaryFullFilePath'])) {
+            if (!$fileManager->fileExists($this->params['temporaryFullFilePath'])) {
                 $fileManager->mkdirtree($this->params['temporaryFullFilePath']);
             }
 
             foreach ($this->getExportClasses() as $exportClass) {
-                $exporter = new \ReflectionClass("CalidadFECYT\\classes\\export\\" .$exportClass);
-                if($exporter != null) {
+                $exporter = new \ReflectionClass("CalidadFECYT\\classes\\export\\" . $exportClass);
+                if ($exporter != null) {
                     $exporterInstance = $exporter->newInstanceArgs(array());
 
-                    if($exporterInstance != null && $exporterInstance instanceof InterfaceRunner ) {
+                    if ($exporterInstance != null && $exporterInstance instanceof InterfaceRunner) {
                         $exporterInstance->run($this->params);
                     } else {
                         throw new \Exception("Null or unexpected class: " . $exportClass);
@@ -137,10 +140,12 @@ class CalidadFECYT
             LogUtils::log($e->getTraceAsString());
             throw $e;
         } finally {
-            if($this->params['temporaryFullFilePath'] != null
-                && $fileManager->fileExists($this->params['temporaryFullFilePath'])) {
-                    $fileManager->rmtree($this->params['temporaryFullFilePath']);
-                }
+            if (
+                $this->params['temporaryFullFilePath'] != null
+                && $fileManager->fileExists($this->params['temporaryFullFilePath'])
+            ) {
+                $fileManager->rmtree($this->params['temporaryFullFilePath']);
+            }
         }
     }
 
@@ -155,7 +160,7 @@ class CalidadFECYT
             $context = $this->params['context'];
 
             $exporter = new \ReflectionClass("CalidadFECYT\\classes\\export\\Editorial");
-            if($exporter != null) {
+            if ($exporter != null) {
                 $this->params['submission'] = $submission;
 
                 $exporterInstance = $exporter->newInstanceArgs(array());
@@ -164,11 +169,11 @@ class CalidadFECYT
                 $this->params['timestamp'] = $timestamp;
                 $this->params['temporaryFullFilePath'] = OJS_FILES_TEMPORARY_DIRECTORY . '/' . $tempDirectoryName;
 
-                if(!$fileManager->fileExists($this->params['temporaryFullFilePath'])) {
+                if (!$fileManager->fileExists($this->params['temporaryFullFilePath'])) {
                     $fileManager->mkdirtree($this->params['temporaryFullFilePath']);
                 }
 
-                if($exporterInstance != null && $exporterInstance instanceof InterfaceRunner ) {
+                if ($exporterInstance != null && $exporterInstance instanceof InterfaceRunner) {
                     $exporterInstance->run($this->params);
                 } else {
                     throw new \Exception("Null or unexpected class: Editorial");
@@ -182,8 +187,10 @@ class CalidadFECYT
             LogUtils::log($e->getTraceAsString());
             throw $e;
         } finally {
-            if($this->params['temporaryFullFilePath'] != null
-                && $fileManager->fileExists($this->params['temporaryFullFilePath'])) {
+            if (
+                $this->params['temporaryFullFilePath'] != null
+                && $fileManager->fileExists($this->params['temporaryFullFilePath'])
+            ) {
                 $fileManager->rmtree($this->params['temporaryFullFilePath']);
             }
         }
@@ -193,14 +200,14 @@ class CalidadFECYT
     {
         $request = $this->params['request'];
         $context = $this->params['context'];
-        if($request == null || $context == null) {
+        if ($request == null || $context == null) {
             throw new \Exception("Invalid parameters");
         }
 
         $exportIndex = $request->getUserVar('exportIndex');
         $exportClasses = $this->getExportClasses();
         $length = count($exportClasses);
-        if($exportIndex == null || $exportIndex < 0 || $exportIndex > ($length - 1)) {
+        if ($exportIndex == null || $exportIndex < 0 || $exportIndex > ($length - 1)) {
             throw new \Exception("Invalid exportIndex parameter");
         }
     }
@@ -209,7 +216,7 @@ class CalidadFECYT
     {
         $request = $this->params['request'];
         $context = $this->params['context'];
-        if($request == null || $context == null) {
+        if ($request == null || $context == null) {
             throw new \Exception("Invalid parameters");
         }
     }
@@ -219,7 +226,7 @@ class CalidadFECYT
         $request = $this->params['request'];
         $context = $this->params['context'];
 
-        if($request == null || $context == null || $submission == null) {
+        if ($request == null || $context == null || $submission == null) {
             throw new \Exception("Invalid parameters");
         }
     }

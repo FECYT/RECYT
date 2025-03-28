@@ -5,93 +5,103 @@ namespace CalidadFECYT\classes\export;
 use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
-import('lib.pkp.classes.submission.SubmissionComment');
-
-class Editorial extends AbstractRunner implements InterfaceRunner {
-
-    private $contextId;
-    private $submissionId;
+use PKP\file\FileManager;
+use PKP\workflow\WorkflowStageDAO;
+use APP\facades\Repo;
+use PKP\submission\PKPSubmission;
+use APP\i18n\AppLocale;
+use PKP\submission\SubmissionComment;
+use PKP\submission\reviewAssignment\ReviewAssignment;
+use PKP\log\EmailLogDAO;
+class Editorial extends AbstractRunner implements InterfaceRunner
+{
+    private int $contextId;
+    private int $submissionId;
 
     public function run(&$params)
     {
-        $fileManager = new \FileManager();
-        $context = $params["context"];
-        $submission = $params['submission'];
 
-        if(!$context) {
+        $fileManager = new FileManager();
+        $context = $params["context"] ?? null;
+        $submission = $params["submission"] ?? null;
+        $dirFiles = $params['temporaryFullFilePath'] ?? '';
+
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
         $this->contextId = $context->getId();
 
-        if(!$submission) {
+        if (!$submission) {
             throw new \Exception("Envío no encontrado");
         }
-
-        $dirFiles = $params['temporaryFullFilePath'];
+        $this->submissionId = $submission;
 
         try {
-            $reviewAssignmentDao = \DAORegistry::getDAO('ReviewAssignmentDAO'); /* @var $reviewAssignmentDao \ReviewAssignmentDAO */
-            \AppLocale::requireComponents(LOCALE_COMPONENT_PKP_SUBMISSION, LOCALE_COMPONENT_PKP_USER, LOCALE_COMPONENT_APP_SUBMISSION);
+            AppLocale::requireComponents(LOCALE_COMPONENT_PKP_SUBMISSION, LOCALE_COMPONENT_PKP_USER, LOCALE_COMPONENT_APP_SUBMISSION);
 
-            $this->generateReviewReport($reviewAssignmentDao, $context, $submission, $dirFiles);
-            $this->generateHistoryFile($submission, $dirFiles);
-            $this->getReview($submission, $context, $dirFiles);
-            $this->getSubmissionsFiles($submission, $fileManager, $dirFiles);
+            $submissionObj = Repo::submission()->get($this->submissionId);
+            if (!$submissionObj) {
+                throw new \Exception("No se pudo cargar el envío");
+            }
+            $publication = $submissionObj->getCurrentPublication();
+            if (!$publication || $submissionObj->getStatus() !== PKPSubmission::STATUS_PUBLISHED) {
+                throw new \Exception("El envío no tiene una publicación válida o no está publicado");
+            }
 
-            $zipFilename = $dirFiles.'/flujo_editorial_envio_'.$submission.'.zip';
+            $this->generateReviewReport($submissionObj, $dirFiles);
+            $this->generateHistoryFile($submissionObj, $dirFiles);
+            $this->getReview($submissionObj, $context, $dirFiles);
+            if (method_exists($this, 'getSubmissionsFiles')) {
+                $this->getSubmissionsFiles($submissionObj, $fileManager, $dirFiles);
+            } else {
+                error_log("Método getSubmissionsFiles no definido en Editorial");
+                throw new \Exception("Método getSubmissionsFiles no encontrado");
+            }
+
+            $zipFilename = $dirFiles . '/flujo_editorial_envio_' . $this->submissionId . '.zip';
             ZipUtils::zip([], [$dirFiles], $zipFilename);
             $fileManager->downloadByPath($zipFilename);
         } catch (\Exception $e) {
-            throw new \Exception('Se ha producido un error: '.$e->getMessage());
+            throw new \Exception('Se ha producido un error: ' . $e->getMessage());
         }
     }
 
     public function getNameMethod($method)
     {
+        define('SUBMISSION_REVIEW_METHOD_BLIND', 1);
+        define('SUBMISSION_REVIEW_METHOD_DOUBLEBLIND', 2);
+        define('SUBMISSION_REVIEW_METHOD_OPEN', 3);
 
-    define('SUBMISSION_REVIEW_METHOD_BLIND', 1);
-    define('SUBMISSION_REVIEW_METHOD_DOUBLEBLIND', 2);
-    define('SUBMISSION_REVIEW_METHOD_ANONYMOUS', 1);
-    define('SUBMISSION_REVIEW_METHOD_DOUBLEANONYMOUS', 2);
-    define('SUBMISSION_REVIEW_METHOD_OPEN', 3);
-
-    switch ($method) { 
-        case SUBMISSION_REVIEW_METHOD_OPEN:
-            return 'Abrir';
-        case SUBMISSION_REVIEW_METHOD_BLIND:
-        case SUBMISSION_REVIEW_METHOD_ANONYMOUS:
-            return 'Ciego';
-        case SUBMISSION_REVIEW_METHOD_DOUBLEBLIND:
-        case SUBMISSION_REVIEW_METHOD_DOUBLEANONYMOUS:
-            return 'Doble ciego';
+        switch ($method) {
+            case SUBMISSION_REVIEW_METHOD_OPEN:
+                return 'Abrir';
+            case SUBMISSION_REVIEW_METHOD_BLIND:
+                return 'Ciego';
+            case SUBMISSION_REVIEW_METHOD_DOUBLEBLIND:
+                return 'Doble ciego';
             default:
                 return '';
         }
     }
 
-    public function generateReviewReport($reviewAssignmentDao, $context, $submission, $dirFiles)
+    public function generateReviewReport($submission, $dirFiles)
     {
-        list($commentsIterator, $reviewsIterator, $interestsArray) = $this->getReviewReport($context->getId(), $submission);
-        $comments = array();
-        while ($row = $commentsIterator->next()) {
-            if (isset($comments[$row['submission_id']][$row['author_id']])) {
-                $comments[$row['submission_id']][$row['author_id']] .= "; " . $row['comments'];
-            } else {
-                $comments[$row['submission_id']][$row['author_id']] = $row['comments'];
-            }
-        }
+        $reviewAssignmentDao = \DAORegistry::getDAO('ReviewAssignmentDAO');
+        $reviewAssignments = $reviewAssignmentDao->getBySubmissionId($submission->getId());
 
-        import('lib.pkp.classes.submission.reviewAssignment.ReviewAssignment');
-        $recommendations = array(
-            SUBMISSION_REVIEWER_RECOMMENDATION_ACCEPT => 'reviewer.article.decision.accept',
-            SUBMISSION_REVIEWER_RECOMMENDATION_PENDING_REVISIONS => 'reviewer.article.decision.pendingRevisions',
-            SUBMISSION_REVIEWER_RECOMMENDATION_RESUBMIT_HERE => 'reviewer.article.decision.resubmitHere',
-            SUBMISSION_REVIEWER_RECOMMENDATION_RESUBMIT_ELSEWHERE => 'reviewer.article.decision.resubmitElsewhere',
-            SUBMISSION_REVIEWER_RECOMMENDATION_DECLINE => 'reviewer.article.decision.decline',
-            SUBMISSION_REVIEWER_RECOMMENDATION_SEE_COMMENTS => 'reviewer.article.decision.seeComments'
-        );
+        $comments = $this->getComments($submission->getId());
+        $interests = $this->getReviewerInterests($submission->getId());
 
-        $columns = array(
+        $recommendations = [
+            ReviewAssignment::SUBMISSION_REVIEWER_RECOMMENDATION_ACCEPT => 'reviewer.article.decision.accept',
+            ReviewAssignment::SUBMISSION_REVIEWER_RECOMMENDATION_PENDING_REVISIONS => 'reviewer.article.decision.pendingRevisions',
+            ReviewAssignment::SUBMISSION_REVIEWER_RECOMMENDATION_RESUBMIT_HERE => 'reviewer.article.decision.resubmitHere',
+            ReviewAssignment::SUBMISSION_REVIEWER_RECOMMENDATION_RESUBMIT_ELSEWHERE => 'reviewer.article.decision.resubmitElsewhere',
+            ReviewAssignment::SUBMISSION_REVIEWER_RECOMMENDATION_DECLINE => 'reviewer.article.decision.decline',
+            ReviewAssignment::SUBMISSION_REVIEWER_RECOMMENDATION_SEE_COMMENTS => 'reviewer.article.decision.seeComments'
+        ];
+
+        $columns = [
             'stage_id' => __('workflow.stage'),
             'round' => 'Ronda',
             'submission' => 'Título del envío',
@@ -118,397 +128,281 @@ class Editorial extends AbstractRunner implements InterfaceRunner {
             'declined' => __('submissions.declined'),
             'recommendation' => 'Recomendación',
             'comments' => 'Comentarios sobre el envío'
-        );
+        ];
 
-        $reviewFormResponseDao = \DAORegistry::getDAO('ReviewFormResponseDAO');
-        $reviewFormElementDao = \DAORegistry::getDAO('ReviewFormElementDAO');
+        $file = fopen($dirFiles . "/Informes_evaluacion.csv", "w");
+        fputcsv($file, array_keys($columns));
 
-        $file = fopen($dirFiles."/Informes_evaluacion.csv", "w");
-        if (fputcsv($file, $columns) === false) die("Error al escribir en el archivo CSV\n");
+        $locale = AppLocale::getLocale(); // Get the current locale
 
-        foreach ($reviewsIterator as $row) {
-			if (substr($row->date_response_due, 11) === '00:00:00') {
-				$row->date_response_due = substr($row->date_response_due, 0, 11) . '23:59:59';
-			}
-			if (substr($row->date_due, 11) === '00:00:00') {
-				$row->date_due = substr($row->date_due, 0, 11) . '23:59:59';
-			}
-			list($overdueResponseDays, $overdueDays) = $this->getOverdueDays($row);
-			$row->overdue_response = $overdueResponseDays;
-			$row->overdue = $overdueDays;
+        foreach ($reviewAssignments as $review) {
+            $reviewer = Repo::user()->get($review->getReviewerId());
+            $overdue = $this->getOverdueDays($review);
 
-			foreach ($columns as $index => $junk) switch ($index) {
-				case 'stage_id':
-					$columns[$index] = __(\WorkflowStageDAO::getTranslationKeyFromId($row->$index));
-					break;
-				case 'declined':
-				case 'cancelled':
-					$columns[$index] = __($row->$index?'common.yes':'common.no');
-					break;
-				case 'unconsidered':
-					$columns[$index] = __($row->$index?'common.yes':'');
-					break;
-					case 'recommendation':
-					if (isset($recommendations[$row->$index])) {
-						$columns[$index] = (!isset($row->$index)) ? __('common.none') : __($recommendations[$row->$index]);
-					} else {
-						$columns[$index] = '';
-					}
-					break;
-				case 'comments':
-					$reviewAssignment = $reviewAssignmentDao->getById($row->review_id);
-					$body = '';
+            $row = [
+                'stage_id' => __(WorkflowStageDAO::getTranslationKeyFromId($review->getStageId())),
+                'round' => $review->getRound(),
+                'submission' => $submission->getLocalizedTitle(),
+                'submission_id' => $submission->getId(),
+                'reviewer' => $reviewer ? $reviewer->getFullName() : '',
+                'user_given' => $reviewer ? $reviewer->getGivenName($locale) : '',
+                'user_family' => $reviewer ? $reviewer->getFamilyName($locale) : '',
+                'orcid' => $reviewer ? $reviewer->getOrcid() : '',
+                'country' => $reviewer ? $reviewer->getCountry() : '',
+                'affiliation' => $reviewer ? $reviewer->getAffiliation($locale) : '',
+                'email' => $reviewer ? $reviewer->getEmail() : '',
+                'interests' => $interests[$review->getReviewerId()] ?? '',
+                'dateassigned' => $review->getDateAssigned(),
+                'datenotified' => $review->getDateNotified(),
+                'dateconfirmed' => $review->getDateConfirmed(),
+                'datecompleted' => $review->getDateCompleted(),
+                'dateacknowledged' => $review->getDateAcknowledged(),
+                'unconsidered' => '', // Removed getUnconsidered()
+                'datereminded' => $review->getDateReminded(),
+                'dateresponsedue' => $review->getDateResponseDue(),
+                'overdueresponse' => $overdue[0],
+                'datedue' => $review->getDateDue(),
+                'overdue' => $overdue[1],
+                'declined' => $review->getDeclined() ? __('common.yes') : __('common.no'),
+                'recommendation' => $review->getRecommendation() ? __($recommendations[$review->getRecommendation()]) : '',
+                'comments' => $comments[$review->getReviewerId()] ?? ''
+            ];
 
-					if ($reviewAssignment->getDateCompleted() != null && ($reviewFormId = $reviewAssignment->getReviewFormId())) {
-						$reviewId = $reviewAssignment->getId();
-						$reviewFormElements = $reviewFormElementDao->getByReviewFormId($reviewFormId);
-						while ($reviewFormElement = $reviewFormElements->next()) {
-							if (!$reviewFormElement->getIncluded()) continue;
-							$body .= \PKPString::stripUnsafeHtml($reviewFormElement->getLocalizedQuestion());
-							$reviewFormResponse = $reviewFormResponseDao->getReviewFormResponse($reviewId, $reviewFormElement->getId());
-							if ($reviewFormResponse) {
-								$possibleResponses = $reviewFormElement->getLocalizedPossibleResponses();
-								if (in_array($reviewFormElement->getElementType(), [REVIEW_FORM_ELEMENT_TYPE_CHECKBOXES, REVIEW_FORM_ELEMENT_TYPE_RADIO_BUTTONS])) {
-									ksort($possibleResponses);
-									$possibleResponses = array_values($possibleResponses);
-								}
-								if (in_array($reviewFormElement->getElementType(), $reviewFormElement->getMultipleResponsesElementTypes())) {
-									if ($reviewFormElement->getElementType() == REVIEW_FORM_ELEMENT_TYPE_CHECKBOXES) {
-										$body .= '<ul>';
-										foreach ($reviewFormResponse->getValue() as $value) {
-											$body .= '<li>' . \PKPString::stripUnsafeHtml($possibleResponses[$value]) . '</li>';
-										}
-										$body .= '</ul>';
-									} else {
-										$body .= '<blockquote>' . \PKPString::stripUnsafeHtml($possibleResponses[$reviewFormResponse->getValue()]) . '</blockquote>';
-									}
-									$body .= '<br>';
-								} else {
-									$body .= '<blockquote>' . nl2br(htmlspecialchars($reviewFormResponse->getValue())) . '</blockquote>';
-								}
-							}
-						}
-					}
-
-					if (isset($comments[$row->submission_id][$row->reviewer_id])) {
-						$columns[$index] = $comments[$row->submission_id][$row->reviewer_id];
-					} else {
-						$columns[$index] = $body;
-					}
-					break;
-				case 'interests':
-					if (isset($interestsArray[$row->reviewer_id])) {
-						$columns[$index] = $interestsArray[$row->reviewer_id];
-					} else {
-						$columns[$index] = '';
-					}
-					break;
-				default:
-					$columns[$index] = $row->$index;
-			}
-			fputcsv($file, $columns);
+            fputcsv($file, $row);
         }
-
-        rewind($file);
-        $csvContent = stream_get_contents($file);
         fclose($file);
     }
-
-    public function getReviewReport($contextId, $submission)
+    private function getComments($submissionId)
     {
-        $locale = \AppLocale::getLocale();
-        $submissionDao = \DAORegistry::getDAO('SubmissionDAO'); /* @var $submissionDao \SubmissionDAO */
+        $submissionCommentDao = \DAORegistry::getDAO('SubmissionCommentDAO');
+        $commentsIterator = $submissionCommentDao->getSubmissionComments($submissionId, SubmissionComment::COMMENT_TYPE_PEER_REVIEW);
 
-        $commentsReturner = $submissionDao->retrieve(
-			'SELECT	sc.submission_id,
-				sc.comments,
-				sc.author_id
-			FROM	submission_comments sc
-				JOIN submissions s ON (s.submission_id = sc.submission_id)
-			WHERE	comment_type = ?
-				AND s.context_id = ?
-                AND sc.submission_id IN('.$submission.')',
-			[COMMENT_TYPE_PEER_REVIEW, (int) $contextId]
-		);
-
-        $userDao = \DAORegistry::getDAO('UserDAO');
-        $site = \Application::get()->getRequest()->getSite();
-        $sitePrimaryLocale = $site->getPrimaryLocale();
-
-		$reviewsReturner = $submissionDao->retrieve(
-			'SELECT	r.stage_id AS stage_id,
-				r.review_id as review_id,
-				r.round AS round,
-				COALESCE(asl.setting_value, aspl.setting_value) AS submission,
-				a.submission_id AS submission_id,
-				u.user_id AS reviewer_id,
-				u.username AS reviewer,
-				' . $userDao->getFetchColumns() .',
-				u.email AS email,
-				u.country AS country,
-				us.setting_value AS orcid,
-				COALESCE(uasl.setting_value, uas.setting_value) AS affiliation,
-				r.date_assigned AS date_assigned,
-				r.date_notified AS date_notified,
-				r.date_confirmed AS date_confirmed,
-				r.date_completed AS date_completed,
-				r.date_acknowledged AS date_acknowledged,
-				r.date_reminded AS date_reminded,
-				r.date_due AS date_due,
-				r.date_response_due AS date_response_due,
-				(r.declined=1) AS declined,
-				(r.unconsidered=1) AS unconsidered,
-				(r.cancelled=1) AS cancelled,
-				r.recommendation AS recommendation
-			FROM	review_assignments r
-				LEFT JOIN submissions a ON r.submission_id = a.submission_id
-				LEFT JOIN publications p ON a.current_publication_id = p.publication_id
-				LEFT JOIN publication_settings asl ON (p.publication_id = asl.publication_id AND asl.locale = ? AND asl.setting_name = ?)
-				LEFT JOIN publication_settings aspl ON (p.publication_id = aspl.publication_id AND aspl.locale = a.locale AND aspl.setting_name = ?)
-				LEFT JOIN users u ON (u.user_id = r.reviewer_id)
-				' . $userDao->getFetchJoins() .'
-				LEFT JOIN user_settings uas ON (u.user_id = uas.user_id AND uas.setting_name = ? AND uas.locale = a.locale)
-				LEFT JOIN user_settings uasl ON (u.user_id = uasl.user_id AND uasl.setting_name = ? AND uasl.locale = ?)
-				LEFT JOIN user_settings us ON (u.user_id = us.user_id AND us.setting_name = ?)
-			WHERE	 a.context_id = ?
-			ORDER BY submission',
-			array_merge(
-				[
-					$locale,
-					'title',
-					'title',
-				],
-				$userDao->getFetchParameters(),
-				[
-					'affiliation',
-					'affiliation',
-					$sitePrimaryLocale,
-					'orcid',
-					(int) $contextId
-				]
-			)
-		);
-
-        import('lib.pkp.classes.user.InterestManager');
-		$interestManager = new \InterestManager();
-		$assignedReviewerIds = $submissionDao->retrieve(
-			'SELECT	r.reviewer_id
-			FROM	review_assignments r
-				LEFT JOIN submissions a ON r.submission_id = a.submission_id
-			WHERE	 a.context_id = ?
-			ORDER BY r.reviewer_id',
-			[(int) $contextId]
-		);
-
-		$interests = [];
-		while ($row = $assignedReviewerIds->next()) {
-			if (!array_key_exists($row['reviewer_id'], $interests)) {
-				$user = $userDao->getById($row['reviewer_id']);
-				$reviewerInterests = $interestManager->getInterestsString($user);
-				if (!empty($reviewerInterests))	$interests[$row['reviewer_id']] = $reviewerInterests;
-			}
-		}
-        
-		return [$commentsReturner, $reviewsReturner, $interests];
+        $result = [];
+        foreach ($commentsIterator->toArray() as $comment) {
+            $result[$comment->getAuthorId()] = $result[$comment->getAuthorId()] ?? '';
+            $result[$comment->getAuthorId()] .= ($result[$comment->getAuthorId()] ? '; ' : '') . $comment->getComments();
+        }
+        return $result;
     }
 
-    public function getOverdueDays($row)
+    private function getReviewerInterests($submissionId)
     {
-		$responseDueTime = strtotime($row->date_response_due);
-		$reviewDueTime = strtotime($row->date_due);
-		$overdueResponseDays = $overdueDays = '';
-		if (!$row->date_confirmed){ // no response
-			if($responseDueTime < time()) { // response overdue
-				$datediff = time() - $responseDueTime;
-				$overdueResponseDays = round($datediff / (60 * 60 * 24));
-			} elseif ($reviewDueTime < time()) { // review overdue but not response
-				$datediff = time() - $reviewDueTime;
-				$overdueDays = round($datediff / (60 * 60 * 24));
-			}
-		} elseif (!$row->date_completed) { // response given, but not completed
-			if ($reviewDueTime < time()) { // review due
-				$datediff = time() - $reviewDueTime;
-				$overdueDays = round($datediff / (60 * 60 * 24));
-			}
-		}
-		return [$overdueResponseDays, $overdueDays];
+        $reviewAssignmentDao = \DAORegistry::getDAO('ReviewAssignmentDAO');
+        $reviewAssignments = $reviewAssignmentDao->getBySubmissionId($submissionId);
+        $controlledVocabDao = \DAORegistry::getDAO('ControlledVocabDAO');
+        $interestEntryDao = \DAORegistry::getDAO('InterestEntryDAO');
+
+        $interestsVocab = $controlledVocabDao->getBySymbolic('interest', ASSOC_TYPE_USER);
+
+        $interests = [];
+        foreach ($reviewAssignments as $review) {
+            $reviewer = Repo::user()->get($review->getReviewerId());
+            if ($reviewer && $interestsVocab) {
+                $userInterests = $interestEntryDao->getByControlledVocabId($interestsVocab->getId(), $reviewer->getId());
+                $interestArray = $userInterests ? $userInterests->toArray() : [];
+                $interestString = !empty($interestArray) ? implode(', ', array_map(function ($interest) {
+                    return $interest->getInterest();
+                }, $interestArray)) : '';
+
+                if ($interestString) {
+                    $interests[$reviewer->getId()] = $interestString;
+                }
+            }
+        }
+        return $interests;
+    }
+
+    private function getOverdueDays($review)
+    {
+        $responseDueTime = strtotime($review->getDateResponseDue());
+        $reviewDueTime = strtotime($review->getDateDue());
+        $overdueResponseDays = $overdueDays = '';
+
+        if (!$review->getDateConfirmed()) {
+            if ($responseDueTime < time()) {
+                $overdueResponseDays = round((time() - $responseDueTime) / (60 * 60 * 24));
+            } elseif ($reviewDueTime < time()) {
+                $overdueDays = round((time() - $reviewDueTime) / (60 * 60 * 24));
+            }
+        } elseif (!$review->getDateCompleted() && $reviewDueTime < time()) {
+            $overdueDays = round((time() - $reviewDueTime) / (60 * 60 * 24));
+        }
+        return [$overdueResponseDays, $overdueDays];
     }
 
     public function getReview($submission, $context, $dirFiles)
     {
-        $reviewAssignmentDao = \DAORegistry::getDAO('ReviewAssignmentDAO'); /* @var $reviewAssignmentDao \ReviewAssignmentDAO */
+        $reviewAssignmentDao = \DAORegistry::getDAO('ReviewAssignmentDAO');
+        $reviewAssignments = $reviewAssignmentDao->getBySubmissionId($submission->getId());
 
-        $query = $reviewAssignmentDao->retrieve(
-            'SELECT	r.review_id, r.submission_id, round
-			FROM review_assignments r
-            LEFT JOIN submissions s ON r.submission_id = s.submission_id
-			WHERE s.context_id = '.$this->contextId.'
-			AND r.submission_id ='.$submission.';'
-        );
+        $text = "Tipo de revisión de la revista: " . $this->getNameMethod($context->getData('defaultReviewMode')) . "\n\n";
+        $text .= "Revisión por pares acorde a indicaciones\nEnvío: " . $submission->getId() . "\n";
 
-        $text = "Tipo de revisión de la revista: ".$this->getNameMethod($context->getData('defaultReviewMode'))."\n\n";
-        $text .= "Revisión por pares acorde a indicaciones\nEnvío: $submission\n";
-
-        foreach ($result as $row) {
-            $reviewAssignment = $reviewAssignmentDao->getById($row->review_id);
-            $text .= "- Revisión ".$row->review_id." de la ronda ".$row->round.": ".$this->getNameMethod($reviewAssignment->getReviewMethod()). "\n";
+        foreach ($reviewAssignments as $review) {
+            $text .= "- Revisión " . $review->getId() . " de la ronda " . $review->getRound() . ": " . $this->getNameMethod($review->getReviewMethod()) . "\n";
         }
 
-        $file = fopen($dirFiles."/Tipologia_revision.txt", "w");
-        fwrite($file, $text);
-        fclose($file);
+        file_put_contents($dirFiles . "/Tipologia_revision.txt", $text);
     }
 
-    public function generateHistoryFile($submissionId, $dirFiles)
+    public function generateHistoryFile($submission, $dirFiles)
     {
-        $entriesEvent = $this->getEventLog($submissionId);
-        $entriesEmail = $this->getEmailLog($submissionId);
-        $entries = array_merge($entriesEvent, $entriesEmail);
+        $eventLogs = Repo::eventLog()
+            ->getCollector()
+            ->filterByAssoc(ASSOC_TYPE_SUBMISSION, [$submission->getId()])
+            ->getMany();
 
-        usort($entries, function($a, $b) {
-            if ($a->date == $b->date) return 0;
-            return $a->date < $b->date ? 1 : -1;
+        $emailLogDao = new EmailLogDAO();
+        $emailLogs = $emailLogDao->getByAssoc(ASSOC_TYPE_SUBMISSION, $submission->getId())->toArray();
+
+        $entries = array_merge(iterator_to_array($eventLogs), $emailLogs);
+        usort($entries, function ($a, $b) {
+            $dateA = $a instanceof \PKP\log\EmailLogEntry ? $a->getDateSent() : $a->getDateLogged();
+            $dateB = $b instanceof \PKP\log\EmailLogEntry ? $b->getDateSent() : $b->getDateLogged();
+            return strcmp($dateB, $dateA);
         });
 
-        $file = fopen($dirFiles."/Historial.csv", "w");
-        $userDao = \DAORegistry::getDAO('UserDAO'); /* @var $userDao \UserDAO */
-        $eventLogDao = \DAORegistry::getDAO('SubmissionEventLogDAO'); /* @var $submissionEventLogDao \SubmissionEventLogDAO */
+        $file = fopen($dirFiles . "/Historial.csv", "w");
+        fputcsv($file, ['ID', 'Usuario', 'Fecha', 'Evento']);
 
         foreach ($entries as $entry) {
-            if ($entry->message) {
-                $eventLog = $eventLogDao->getById($entry->id);
-                $eventParams = $eventLog->getParams();
 
-                fputcsv($file, array(
-                    $entry->id,
-                    $userDao->getUserFullName($entry->user_id),
-                    date("Y-m-d", strtotime($entry->date)),
-                    __($eventLog->getMessage(), array(
-                        'authorName' => $eventParams['authorName'],
-                        'editorName' => $eventParams['editorName'],
-                        'submissionId' => $eventParams['submissionId'],
-                        'decision' => $eventParams['decision'],
-                        'round' => $eventParams['round'],
-                        'reviewerName' => $eventParams['reviewerName'],
-                        'fileId' => $eventParams['fileId'],
-                        'username' => $eventParams['username'],
-                        'name' => $eventParams['name'],
-                        'originalFileName' => $eventParams['originalFileName'],
-                        'title' => $eventParams['title'],
-                        'userGroupName' => $eventParams['userGroupName'],
-                        'fileRevision' => $eventParams['fileRevision'],
-                        'userName' => $eventParams['userName'],
-                        'submissionFileId' => $eventParams['submissionFileId'],
-                    )),
-                ));
+            $userId = $entry instanceof \PKP\log\EmailLogEntry ? $entry->getSenderId() : $entry->getUserId();
+            $user = Repo::user()->get($userId);
+
+            if ($entry instanceof \PKP\log\EmailLogEntry) {
+                fputcsv($file, [
+                    $entry->getId(),
+                    $user ? $user->getFullName() : '',
+                    $entry->getDateSent(),
+                    __('submission.event.subjectPrefix') . ' ' . $entry->getSubject() . ': ' . strip_tags($entry->getBody())
+                ]);
+            } elseif ($entry instanceof \PKP\log\SubmissionEventLogEntry) {
+                $params = $entry->getParams();
+
+                error_log("Message: " . $entry->getMessage() . " | Params: " . json_encode($params));
+                $defaultParams = [
+                    'authorName' => '',
+                    'editorName' => '',
+                    'submissionId' => '',
+                    'decision' => '',
+                    'round' => '',
+                    'reviewerName' => '',
+                    'fileId' => '',
+                    'username' => '',
+                    'name' => '',
+                    'originalFileName' => '',
+                    'title' => '',
+                    'userGroupName' => '',
+                    'fileRevision' => '',
+                    'userName' => '',
+                    'submissionFileId' => '',
+                    'submissionFile' => $params['originalFileName'] ?? $params['name'] ?? 'Archivo no especificado' // Más fallbacks
+                ];
+                $combinedParams = array_merge($defaultParams, $params);
+
+                error_log("Combined Params: " . json_encode($combinedParams));
+                try {
+                    $message = __($entry->getMessage(), $combinedParams);
+                } catch (\Exception $e) {
+                    $message = $entry->getMessage() . ' (Error: ' . $e->getMessage() . ' | Params: ' . json_encode($combinedParams) . ')';
+                }
+                fputcsv($file, [$entry->getId(), $user ? $user->getFullName() : '', $entry->getDateLogged(), $message]);
             } else {
-               fputcsv($file, array(
-                    $entry->id,
-                    $userDao->getUserFullName($entry->sender_id),
-                    date("Y-m-d", strtotime($entry->date)),
-                    __('submission.event.subjectPrefix') . ' ' . $entry->subject,
-                   strip_tags($entry->body),
-               ));
+                fputcsv($file, [
+                    $entry->getId(),
+                    $user ? $user->getFullName() : '',
+                    $entry->getDateLogged(),
+                    'Evento genérico: ' . $entry->getEventType()
+                ]);
             }
         }
-
-        rewind($file);
-        $csvContent = stream_get_contents($file);
         fclose($file);
-    }
-
-    public function getEventLog($submission)
-    {
-        $eventLogDao = \DAORegistry::getDAO('SubmissionEventLogDAO'); /* @var $eventLogDao \SubmissionEventLogDAO */
-        $result = $eventLogDao->retrieve(
-            "SELECT log_id as id, assoc_type as type, date_logged as date, message, user_id
-            FROM event_log el
-            WHERE assoc_id = ".$submission.";"
-        );
-
-		return iterator_to_array($result);
-    }
-
-    public function getEmailLog($submission)
-    {
-        $submissionEmailLogDao = \DAORegistry::getDAO('SubmissionEmailLogDAO'); /* @var $submissionEmailLogDao \SubmissionEmailLogDAO */
-
-        $result = $submissionEmailLogDao->retrieve(
-            "SELECT log_id as id, assoc_type as type, date_sent as date, subject, sender_id, body
-            FROM email_log el
-            WHERE assoc_id = ".$submission.";"
-        );
-
-		return iterator_to_array($result);
     }
 
     public function getSubmissionsFiles($submission, $fileManager, $dirFiles)
     {
-        $submissionFileDao = \DAORegistry::getDAO('SubmissionFileDAO'); /* @var $submissionFileDao \SubmissionFileDAO */
-        $submissionFileSubmission = \Services::get('submissionFile')->getMany([
-			'submissionIds' => [$submission],
-			'includeDependentFiles' => true,
-		]);
+        $submissionFiles = Repo::submissionFile()->getCollector()->getMany([
+            'submissionIds' => [$submission->getId()],
+            'includeDependentFiles' => true,
+        ]);
 
-        if ($submissionFileSubmission) {
-            $mainFolder = $dirFiles.'/Archivos';
-            if(!$fileManager->fileExists($mainFolder)) $fileManager->mkdirtree($mainFolder);
+        if ($submissionFiles->count()) {
+            $mainFolder = $dirFiles . '/Archivos';
+            $fileManager->mkdir($mainFolder);
             $listId = "";
 
-            foreach ($submissionFileSubmission as $submissionFile) {
-                $id = $submissionFile->getId();
-                $path = \Config::getVar('files', 'files_dir').'/'.$submissionFile->getData('path');
-                $folder = $mainFolder.'/';
+            foreach ($submissionFiles as $file) {
+                $id = $file->getId();
+                $path = $file->getData('path');
+                $fullPath = \Config::getVar('files', 'files_dir') . '/' . $path;
 
-                switch ($submissionFile->getData('fileStage')) {
-                    case SUBMISSION_FILE_SUBMISSION: $folder .= 'submission'; break;
-                    case SUBMISSION_FILE_NOTE: $folder .= 'note'; break;
-                    case SUBMISSION_FILE_REVIEW_FILE: $folder .= 'submission/review'; break;
-                    case SUBMISSION_FILE_REVIEW_ATTACHMENT: $folder .= 'submission/review/attachment'; break;
-                    case SUBMISSION_FILE_REVIEW_REVISION: $folder .= 'submission/review/revision'; break;
-                    case SUBMISSION_FILE_FINAL: $folder .= 'submission/final'; break;
-                    case SUBMISSION_FILE_COPYEDIT: $folder .= 'submission/copyedit'; break;
-                    case SUBMISSION_FILE_DEPENDENT: $folder .= 'submission/proof'; break;
-                    case SUBMISSION_FILE_PROOF: $folder .= 'submission/proof'; break;
-                    case SUBMISSION_FILE_PRODUCTION_READY: $folder .= 'submission/productionReady'; break;
-                    case SUBMISSION_FILE_ATTACHMENT: $folder .= 'attachment'; break;
-                    case SUBMISSION_FILE_QUERY: $folder .= 'submission/query'; break;
+                $folder = $mainFolder . '/';
+                switch ($file->getData('fileStage')) {
+                    case SUBMISSION_FILE_SUBMISSION:
+                        $folder .= 'submission';
+                        break;
+                    case SUBMISSION_FILE_NOTE:
+                        $folder .= 'note';
+                        break;
+                    case SUBMISSION_FILE_REVIEW_FILE:
+                        $folder .= 'submission/review';
+                        break;
+                    case SUBMISSION_FILE_REVIEW_ATTACHMENT:
+                        $folder .= 'submission/review/attachment';
+                        break;
+                    case SUBMISSION_FILE_REVIEW_REVISION:
+                        $folder .= 'submission/review/revision';
+                        break;
+                    case SUBMISSION_FILE_FINAL:
+                        $folder .= 'submission/final';
+                        break;
+                    case SUBMISSION_FILE_COPYEDIT:
+                        $folder .= 'submission/copyedit';
+                        break;
+                    case SUBMISSION_FILE_DEPENDENT:
+                        $folder .= 'submission/proof';
+                        break;
+                    case SUBMISSION_FILE_PROOF:
+                        $folder .= 'submission/proof';
+                        break;
+                    case SUBMISSION_FILE_PRODUCTION_READY:
+                        $folder .= 'submission/productionReady';
+                        break;
+                    case SUBMISSION_FILE_ATTACHMENT:
+                        $folder .= 'attachment';
+                        break;
+                    case SUBMISSION_FILE_QUERY:
+                        $folder .= 'submission/query';
+                        break;
                 }
-                
-                if(file_exists($path)) {
-                    $listId .= $id."\n";
 
-                    if(!$fileManager->fileExists($folder)) $fileManager->mkdirtree($folder);
-                    copy($path, $folder.'/'.$id.'_'.$submissionFile->getLocalizedData('name'));
+                if (file_exists($fullPath)) {
+                    $listId .= $id . "\n";
+                    $fileManager->mkdir($folder);
+                    copy($fullPath, $folder . '/' . $id . '_' . $file->getLocalizedData('name'));
                 } else {
-                    $listId .= $id."\t Archivo no encontrado\n";
+                    $listId .= $id . "\t Archivo no encontrado\n";
                 }
             }
 
-            $file = fopen($mainFolder.'/ID_archivos.txt', "w");
-            fwrite($file, $listId);
-            fclose($file);
+            file_put_contents($mainFolder . '/ID_archivos.txt', $listId);
         }
     }
 
     public function getDeclinedSubmissions($issues)
     {
-        $submissionDao = \DAORegistry::getDAO('SubmissionDAO'); /* @var $submissionDao \SubmissionDAO */
-        $query = $submissionDao->retrieve(
-            "SELECT s.submission_id
-            FROM submissions s
-            INNER JOIN publications p ON p.publication_id = s.current_publication_id
-            INNER JOIN publication_settings pp on p.publication_id = pp.publication_id
-            WHERE s.status=".STATUS_DECLINED."
-              AND pp.setting_name='issueId'
-              AND pp.setting_value IN (".$issues.")"
-        );
+        $collector = Repo::submission()
+            ->getCollector()
+            ->filterByStatus([PKPSubmission::STATUS_DECLINED])
+            ->filterByContextIds([$this->contextId]);
 
-        $submissions = array();
-        foreach ($query as $row) {
-            $submissions[] = $row['submission_id'];
-        }
+        $submissions = $collector->getMany()->filter(function ($submission) use ($issues) {
+            $publication = $submission->getCurrentPublication();
+            return in_array($publication->getData('issueId'), explode(',', $issues));
+        });
 
-        return $submissions[array_rand($submissions)];
+        $submissionArray = $submissions->keys()->toArray();
+        return $submissionArray[array_rand($submissionArray)];
     }
 }

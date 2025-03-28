@@ -5,17 +5,23 @@ namespace CalidadFECYT\classes\export;
 use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
+use PKP\file\FileManager;
+use APP\facades\Repo;
+use PKP\submission\PKPSubmission;
+use APP\i18n\AppLocale;
 
-class Issues extends AbstractRunner implements InterfaceRunner {
-
-    private $contextId;
+class Issues extends AbstractRunner implements InterfaceRunner
+{
+    private int $contextId;
 
     public function run(&$params)
     {
-        $fileManager = new \FileManager();
-        $context = $params["context"];
-        $dirFiles = $params['temporaryFullFilePath'];
-        if(!$context) {
+
+        $fileManager = new FileManager();
+        $context = $params["context"] ?? null;
+        $dirFiles = $params['temporaryFullFilePath'] ?? '';
+
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
         $this->contextId = $context->getId();
@@ -25,13 +31,13 @@ class Issues extends AbstractRunner implements InterfaceRunner {
                 $data = $this->getData($issueItem['id']);
                 $submissions = $data['results'];
                 $countAuthors = $data['count'];
-                $volume = $issueItem['volume'] ? "Vol.".$issueItem['volume']." " : '';
-                $number = $issueItem['number'] ? "Num.".$issueItem['number']." " : '';
-                $year = $issueItem['year'] ? "(".$issueItem['year'].")" : '';
-                $nameFile = "/".$volume.$number.$year;
-                $file = fopen($dirFiles . $nameFile.".csv", "w");
+                $volume = $issueItem['volume'] ? "Vol." . $issueItem['volume'] . " " : '';
+                $number = $issueItem['number'] ? "Num." . $issueItem['number'] . " " : '';
+                $year = $issueItem['year'] ? "(" . $issueItem['year'] . ")" : '';
+                $nameFile = "/" . $volume . $number . $year;
+                $file = fopen($dirFiles . $nameFile . ".csv", "w");
 
-                if (! empty($data['results'])) {
+                if (!empty($data['results'])) {
                     $columns = ["Sección", "Título"];
                     for ($a = 1; $a <= $countAuthors; $a++) {
                         $columns = array_merge($columns, [
@@ -45,101 +51,101 @@ class Issues extends AbstractRunner implements InterfaceRunner {
 
                     foreach ($submissions as $submission) {
                         $results = [$submission['section'], $submission['title']];
+                        $arrayValues = array_values($submission['authors']);
+                        $authorCount = count($arrayValues);
+                        for ($a = 0; $a < $authorCount; $a++) {
 
-                        for ($a = 1; $a <= count($submission['authors']); $a++) {
-                            $results = array_merge($results, [
-                                $submission['authors'][$a - 1]['givenName'],
-                                $submission['authors'][$a - 1]['familyName'],
-                                $submission['authors'][$a - 1]['affiliation'],
-                                $submission['authors'][$a - 1]['userGroup']
-                            ]);
-
+                            array_push(
+                                $results,
+                                $arrayValues[$a]['givenName'],
+                                $arrayValues[$a]['familyName'],
+                                $arrayValues[$a]['affiliation'],
+                                $arrayValues[$a]['userGroup']
+                            );
                         }
                         fputcsv($file, array_values($results));
                     }
                 } else {
-                    fputcsv($file, array("Este envío no tiene artículos"));
+                    fputcsv($file, ["Este envío no tiene artículos"]);
                 }
 
                 fclose($file);
             }
 
-            if(!isset($params['exportAll'])) {
+            if (!isset($params['exportAll'])) {
                 $zipFilename = $dirFiles . '/issues.zip';
                 ZipUtils::zip([], [$dirFiles], $zipFilename);
                 $fileManager->downloadByPath($zipFilename);
             }
         } catch (\Exception $e) {
-            throw new \Exception('Se ha producido un error:' . $e->getMessage());
+            throw new \Exception('Se ha producido un error: ' . $e->getMessage());
         }
     }
 
-    public function getData($issue)
+    private function getData($issueId)
     {
-        $issueSubmissions = iterator_to_array(\Services::get('submission')->getMany([
-            'contextId' => $this->contextId,
-            'issueIds' => [$issue],
-            'status' => 3,
-            'orderBy' => 'seq',
-            'orderDirection' => 'ASC',
-        ]));
+        $submissions = Repo::submission()
+            ->getCollector()
+            ->filterByContextIds([$this->contextId])
+            ->filterByIssueIds([$issueId])
+            ->filterByStatus([PKPSubmission::STATUS_PUBLISHED])
+            ->orderBy('seq', 'ASC')
+            ->getMany();
+
         $maxAuthors = 0;
-        $results = array();
+        $results = [];
 
-        foreach ($issueSubmissions as $submission) {
+        foreach ($submissions as $submission) {
             $publication = $submission->getCurrentPublication();
-            $maxAuthors = max($maxAuthors, count($publication->getData('authors')));
+            $authors = Repo::author()
+                ->getCollector()
+                ->filterByPublicationIds([$publication->getId()])
+                ->getMany()
+                ->toArray();
 
-            $sectionId = $submission->getCurrentPublication()->getData('sectionId');
-            $section = \Application::get()->getSectionDao()->getById($sectionId);
+            $maxAuthors = max($maxAuthors, count($authors));
+
+            $section = Repo::section()->get($publication->getData('sectionId'));
 
             $results[] = [
-                'title' => $submission->getCurrentPublication()->getLocalizedData('title'),
-                'section' => $section->getData('hideTitle') ? '' : $section->getLocalizedData('title'),
-                'authors' => array_map(function($author) {
-                $userGroupDao = \DAORegistry::getDAO('UserGroupDAO'); /* @var $userGroupDao \UserGroupDAO */
-                $userGroup = $userGroupDao->getById($author->getData('userGroupId'))->getLocalizedData('name');
+                'title' => $publication->getLocalizedData('title', AppLocale::getLocale()),
+                'section' => $section && !$section->getHideTitle() ? $section->getLocalizedTitle() : '',
+                'authors' => array_map(function ($author) {
+                    $userGroup = Repo::userGroup()->get($author->getData('userGroupId'));
+                    return [
+                        'givenName' => $author->getGivenName(AppLocale::getLocale()) ?? '',
+                        'familyName' => $author->getFamilyName(AppLocale::getLocale()) ?? '',
+                        'affiliation' => $author->getAffiliation(AppLocale::getLocale()) ?? '',
+                        'userGroup' => $userGroup ? $userGroup->getLocalizedName() : ''
+                    ];
+                }, $authors)
+            ];
 
-                return [
-                    'givenName' => $author->getLocalizedGivenName(),
-                    'familyName' => $author->getLocalizedFamilyName(),
-                    'affiliation' => $author->getLocalizedData('affiliation'),
-                    'userGroup' => $userGroup ?? ''
-                ];
-                }, $publication->getData('authors'))
-                ];
         }
 
-        return array(
+        return [
             "count" => $maxAuthors,
             'results' => $results
-        );
+        ];
     }
 
-    public function getIssues()
+    private function getIssues()
     {
-        $data = array();
-        $issueDao = \DAORegistry::getDAO('IssueDAO'); /* @var $issueDao \IssueDAO */
-        $query = $issueDao->retrieve(
-            "SELECT issue_id as id, volume, year, number
-            FROM issues
-            WHERE journal_id = ".$this->contextId."
-            AND published = 1
-            ORDER BY date_published DESC
-            LIMIT 4"
-            );
+        $issues = Repo::issue()
+            ->getCollector()
+            ->filterByContextIds([$this->contextId])
+            ->filterByPublished(true)
+            ->orderBy('datePublished', 'DESC')
+            ->limit(4)
+            ->getMany();
 
-        while ($query->valid()) {
-            $row = get_object_vars($query->current());
-            $data[] = [
-                'id' => $row['id'],
-                'volume' => $row['volume'],
-                'year' => $row['year'],
-                'number' => $row['number'],
+        return array_map(function ($issue) {
+            return [
+                'id' => $issue->getId(),
+                'volume' => $issue->getVolume(),
+                'year' => $issue->getYear(),
+                'number' => $issue->getNumber(),
             ];
-            $query->next();
-        }
-
-        return $data;
+        }, $issues->values()->toArray());
     }
 }

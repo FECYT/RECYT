@@ -5,81 +5,73 @@ namespace CalidadFECYT\classes\export;
 use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
+use PKP\file\FileManager;
+use PKP\core\PKPApplication;
+use APP\facades\Repo;
+use APP\i18n\AppLocale;
 
-class DataReviewers extends AbstractRunner implements InterfaceRunner {
-
-    private $contextId;
+class DataReviewers extends AbstractRunner implements InterfaceRunner
+{
+    private int $contextId;
 
     public function run(&$params)
     {
-        $fileManager = new \FileManager();
-        $context = $params["context"];
-        $dirFiles = $params['temporaryFullFilePath'];
-        if(!$context) {
+        $fileManager = new FileManager();
+        $context = $params["context"] ?? null;
+        $dirFiles = $params['temporaryFullFilePath'] ?? '';
+
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
+
         $this->contextId = $context->getId();
 
         try {
             $dateTo = date('Ymd', strtotime("-1 day"));
             $dateFrom = date("Ymd", strtotime("-1 year", strtotime($dateTo)));
-            $file = fopen($dirFiles . "/revisores_".$dateFrom."_".$dateTo.".csv", "w");
-            fputcsv($file, array("ID", "Nombre", "Apellidos", "Institución", "Correo electrónico"));
+            $locale = AppLocale::getLocale();
 
-            $reviewers = $this->getReviewers(array($dateFrom, $dateTo, $this->contextId));
-            foreach ($reviewers as $value) {
-                $reviewer = get_object_vars($value);
-                fputcsv($file, array(
-                    $reviewer['id'],
-                    $reviewer['givenName'],
-                    $reviewer['familyName'],
-                    $reviewer['affiliation'],
-                    $reviewer['email']
-                ));
+            $file = fopen($dirFiles . "/revisores_" . $dateFrom . "_" . $dateTo . ".csv", "w");
+            fputcsv($file, ["ID", "Nombre", "Apellidos", "Institución", "Correo electrónico"]);
+
+            $reviewers = $this->getReviewers([$dateFrom, $dateTo, $this->contextId]);
+            foreach ($reviewers as $reviewer) {
+                fputcsv($file, [
+                    $reviewer->getId(),
+                    $reviewer->getData('givenName', $locale) ?? '',
+                    $reviewer->getData('familyName', $locale) ?? '',
+                    $reviewer->getData('affiliation', $locale) ?? '',
+                    $reviewer->getData('email') ?? ''
+                ]);
             }
 
             fclose($file);
 
-            if(!isset($params['exportAll'])) {
+            if (!isset($params['exportAll'])) {
                 $zipFilename = $dirFiles . '/dataReviewers.zip';
                 ZipUtils::zip([], [$dirFiles], $zipFilename);
                 $fileManager->downloadByPath($zipFilename);
             }
         } catch (\Exception $e) {
-            throw new \Exception('Se ha producido un error:' . $e->getMessage());
+            throw new \Exception('Se ha producido un error: ' . $e->getMessage());
         }
     }
 
-    function getReviewers($params)
+    public function getReviewers(array $params): iterable
     {
-        $userDao = \DAORegistry::getDAO('UserDAO'); /* @var $userDao \UserDAO */
+        $collector = Repo::user()
+            ->getCollector()
+            ->filterByRoleIds([\ROLE_ID_REVIEWER])
+            ->filterByContextIds([$params[2]]);
 
-        return $userDao->retrieve(
-            "SELECT
-                    u.user_id as id,
-                    u.username,
-                    max(giv.setting_value) givenName,
-                    max(fam.setting_value) familyName,
-                    max(aff.setting_value) affiliation,
-                    u.email
-                FROM
-                    users u
-                        left outer join user_settings giv on (u.user_id = giv.user_id and giv.setting_name = 'givenName')
-                        left outer join user_settings fam on (u.user_id = fam.user_id and fam.setting_name = 'familyName')
-                        left outer join user_settings aff on (u.user_id = aff.user_id and aff.setting_name = 'affiliation')
-                        left join user_user_groups grp on (u.user_id = grp.user_id)
-                        left join user_group_settings ugs on (grp.user_group_id = ugs.user_group_id)
-                        left join review_assignments ra ON (u.user_id = ra.reviewer_id)
-                        left join submissions s ON (s.submission_id = ra.submission_id)
-                WHERE
-                    ugs.setting_value LIKE 'Revisor%'
-                    AND ra.date_completed >= ?
-                    AND ra.date_completed <= ?
-                    AND s.context_id = ?
-                GROUP BY
-                    u.user_id,
-                    u.username,
-                    u.email;", $params
-            );
+        $query = $collector->getQueryBuilder()
+            ->join('review_assignments as ra', 'ra.reviewer_id', '=', 'u.user_id')
+            ->join('submissions as s', 's.submission_id', '=', 'ra.submission_id')
+            ->where('ra.date_completed', '>=', $params[0])
+            ->where('ra.date_completed', '<=', $params[1])
+            ->where('s.context_id', '=', $params[2])
+            ->distinct('u.user_id');
+
+        return $collector->getMany($query);
     }
 }
