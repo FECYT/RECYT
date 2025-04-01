@@ -8,8 +8,7 @@ use CalidadFECYT\classes\utils\ZipUtils;
 
 class DataAuthors extends AbstractRunner implements InterfaceRunner
 {
-
-    private $contextId;
+    protected $contextId;
 
     public function run(&$params)
     {
@@ -27,22 +26,26 @@ class DataAuthors extends AbstractRunner implements InterfaceRunner
             $locale = \AppLocale::getLocale();
 
             $file = fopen($dirFiles . "/autores_" . $dateFrom . "_" . $dateTo . ".csv", "w");
-            fputcsv($file, array("ID envío", "ID author", "Nombre", "Apellidos", "Institución", "Correo electrónico"));
+            fputcsv($file, array("ID envío", "DOI", "ID autor", "Nombre", "Apellidos", "Institución", "País", "Correo electrónico"));
 
-            $submissions = $this->getSubmissions(array($this->contextId, $dateFrom, $dateTo));
-            foreach ($submissions as $value) {
-                $submissionItem = get_object_vars($value);
+            $submissions = $this->getSubmissions($dateFrom, $dateTo);
+            foreach ($submissions as $submission) {
                 $submissionDao = \DAORegistry::getDAO('SubmissionDAO');
-                $submission = $submissionDao->getById($submissionItem['id']);
-                $authors = $submission->getAuthors();
+                $submissionObj = $submissionDao->getById($submission->submission_id);
+                $publication = $submissionObj->getCurrentPublication();
+                $doi = $publication->getStoredPubId('doi') ?? 'N/A';
+                $authors = $submissionObj->getAuthors();
 
                 foreach ($authors as $author) {
+
                     fputcsv($file, array(
-                        $submissionItem['id'],
+                        $submissionObj->getId(),
+                        $doi,
                         $author->getId(),
-                        $author->getData('givenName')[$locale],
-                        $author->getData('familyName')[$locale],
-                        $author->getData('affiliation')[$locale],
+                        $author->getData('givenName', $locale),
+                        $author->getData('familyName', $locale),
+                        $author->getData('affiliation', $locale),
+                        $author->getData('country'),
                         $author->getData('email'),
                     ));
                 }
@@ -60,28 +63,21 @@ class DataAuthors extends AbstractRunner implements InterfaceRunner
         }
     }
 
-    public function getSubmissions($params)
+    private function getSubmissions($dateFrom, $dateTo)
     {
-        $submissionDao = \DAORegistry::getDAO('SubmissionDAO'); /* @var $submissionDao \SubmissionDAO */
+        $submissionDao = \DAORegistry::getDAO('SubmissionDAO');
+        $rangeInfo = null; // Para paginación, si es necesario
+        $submissions = $submissionDao->getByContextId($this->contextId, $rangeInfo);
 
-        return $submissionDao->retrieve(
-            "SELECT DISTINCT s.submission_id as id
-	        FROM submissions s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = " . STATUS_PUBLISHED . "
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.date_submitted >= ?
-              AND s.date_submitted <= ?
-            GROUP BY s.submission_id",
-            $params
-        );
+        $filteredSubmissions = [];
+        while ($submission = $submissions->next()) {
+            $dateSubmitted = strtotime($submission->getDateSubmitted());
+            if ($dateSubmitted >= strtotime($dateFrom) && $dateSubmitted <= strtotime($dateTo)) {
+                $filteredSubmissions[] = (object) [
+                    'submission_id' => $submission->getId()
+                ];
+            }
+        }
+        return $filteredSubmissions;
     }
-
 }

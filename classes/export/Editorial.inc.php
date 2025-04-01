@@ -31,7 +31,8 @@ class Editorial extends AbstractRunner implements InterfaceRunner
         $dirFiles = $params['temporaryFullFilePath'];
 
         try {
-            $reviewAssignmentDao = \DAORegistry::getDAO('ReviewAssignmentDAO'); /* @var $reviewAssignmentDao \ReviewAssignmentDAO */
+
+            $reviewAssignmentDao = \DAORegistry::getDAO('ReviewAssignmentDAO');
             \AppLocale::requireComponents(LOCALE_COMPONENT_PKP_SUBMISSION, LOCALE_COMPONENT_PKP_USER, LOCALE_COMPONENT_APP_SUBMISSION);
 
             $this->generateReviewReport($reviewAssignmentDao, $context, $submission, $dirFiles);
@@ -105,16 +106,16 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             'affiliation' => __('user.affiliation'),
             'email' => __('user.email'),
             'interests' => __('user.interests'),
-            'dateassigned' => 'Fecha asignada',
-            'datenotified' => 'Fecha notificada',
-            'dateconfirmed' => 'Fecha confirmada',
-            'datecompleted' => 'Fecha completada',
-            'dateacknowledged' => 'Fecha de reconocimiento',
+            'date_assigned' => 'Fecha asignada',
+            'date_notified' => 'Fecha notificada',
+            'date_confirmed' => 'Fecha confirmada',
+            'date_completed' => 'Fecha completada',
+            'date_acknowledged' => 'Fecha de reconocimiento',
             'unconsidered' => 'Sin considerar',
-            'datereminded' => 'Fecha recordatorio',
-            'dateresponsedue' => __('reviewer.submission.responseDueDate'),
-            'overdueresponse' => 'Días de vencimiento de la respuesta',
-            'datedue' => __('reviewer.submission.reviewDueDate'),
+            'date_reminded' => 'Fecha recordatorio',
+            'date_response_due' => __('reviewer.submission.responseDueDate'),
+            'overdue_response' => 'Días de vencimiento de la respuesta',
+            'date_due' => __('reviewer.submission.reviewDueDate'),
             'overdue' => 'Días de vencimiento de la revisión',
             'declined' => __('submissions.declined'),
             'recommendation' => 'Recomendación',
@@ -129,6 +130,7 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             die("Error al escribir en el archivo CSV\n");
 
         foreach ($reviewsIterator as $row) {
+
             if (substr($row->date_response_due, 11) === '00:00:00') {
                 $row->date_response_due = substr($row->date_response_due, 0, 11) . '23:59:59';
             }
@@ -140,6 +142,8 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             $row->overdue = $overdueDays;
 
             foreach ($columns as $index => $junk)
+
+
                 switch ($index) {
                     case 'stage_id':
                         $columns[$index] = __(\WorkflowStageDAO::getTranslationKeyFromId($row->$index));
@@ -376,7 +380,28 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             return $a->date < $b->date ? 1 : -1;
         });
 
-        $file = fopen($dirFiles . "/Historial.csv", "w");
+        $filePath = $dirFiles . "/Historial.csv";
+        $file = fopen($filePath, "w");
+        if ($file === false) {
+            error_log("No se pudo abrir el archivo Historial.csv en: $filePath");
+            throw new \Exception("No se pudo crear el archivo Historial.csv");
+        }
+
+        fwrite($file, "\xEF\xBB\xBF");
+
+        $headers = [
+            __('common.id'),
+            __('common.user'),
+            __('common.date'),
+            __('common.event')
+        ];
+
+        if (fputcsv($file, $headers) === false) {
+            error_log("Error al escribir las cabeceras en Historial.csv");
+        } else {
+            error_log("Cabeceras escritas correctamente en Historial.csv: " . implode(',', $headers));
+        }
+
         $userDao = \DAORegistry::getDAO('UserDAO'); /* @var $userDao \UserDAO */
         $eventLogDao = \DAORegistry::getDAO('SubmissionEventLogDAO'); /* @var $submissionEventLogDao \SubmissionEventLogDAO */
 
@@ -384,27 +409,26 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             if ($entry->message) {
                 $eventLog = $eventLogDao->getById($entry->id);
                 $eventParams = $eventLog->getParams();
-
                 fputcsv($file, array(
                     $entry->id,
                     $userDao->getUserFullName($entry->user_id),
                     date("Y-m-d", strtotime($entry->date)),
                     __($eventLog->getMessage(), array(
-                        'authorName' => $eventParams['authorName'],
-                        'editorName' => $eventParams['editorName'],
-                        'submissionId' => $eventParams['submissionId'],
-                        'decision' => $eventParams['decision'],
-                        'round' => $eventParams['round'],
-                        'reviewerName' => $eventParams['reviewerName'],
-                        'fileId' => $eventParams['fileId'],
-                        'username' => $eventParams['username'],
-                        'name' => $eventParams['name'],
-                        'originalFileName' => $eventParams['originalFileName'],
-                        'title' => $eventParams['title'],
-                        'userGroupName' => $eventParams['userGroupName'],
-                        'fileRevision' => $eventParams['fileRevision'],
-                        'userName' => $eventParams['userName'],
-                        'submissionFileId' => $eventParams['submissionFileId'],
+                        'authorName' => $eventParams['authorName'] ?? '',
+                        'editorName' => $eventParams['editorName'] ?? '',
+                        'submissionId' => $eventParams['submissionId'] ?? '',
+                        'decision' => $eventParams['decision'] ?? '',
+                        'round' => $eventParams['round'] ?? '',
+                        'reviewerName' => $eventParams['reviewerName'] ?? '',
+                        'fileId' => $eventParams['fileId'] ?? '',
+                        'username' => $eventParams['username'] ?? '',
+                        'name' => $eventParams['name'] ?? '',
+                        'originalFileName' => $eventParams['originalFileName'] ?? '',
+                        'title' => $eventParams['title'] ?? '',
+                        'userGroupName' => $eventParams['userGroupName'] ?? '',
+                        'fileRevision' => $eventParams['fileRevision'] ?? '',
+                        'userName' => $eventParams['userName'] ?? '',
+                        'submissionFileId' => $eventParams['submissionFileId'] ?? '',
                     )),
                 ));
             } else {
@@ -413,16 +437,12 @@ class Editorial extends AbstractRunner implements InterfaceRunner
                     $userDao->getUserFullName($entry->sender_id),
                     date("Y-m-d", strtotime($entry->date)),
                     __('submission.event.subjectPrefix') . ' ' . $entry->subject,
-                    strip_tags($entry->body),
                 ));
             }
         }
 
-        rewind($file);
-        $csvContent = stream_get_contents($file);
         fclose($file);
     }
-
     public function getEventLog($submission)
     {
         $eventLogDao = \DAORegistry::getDAO('SubmissionEventLogDAO'); /* @var $eventLogDao \SubmissionEventLogDAO */

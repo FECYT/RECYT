@@ -8,7 +8,6 @@ use CalidadFECYT\classes\utils\ZipUtils;
 
 class Issues extends AbstractRunner implements InterfaceRunner
 {
-
     private $contextId;
 
     public function run(&$params)
@@ -33,7 +32,7 @@ class Issues extends AbstractRunner implements InterfaceRunner
                 $file = fopen($dirFiles . $nameFile . ".csv", "w");
 
                 if (!empty($data['results'])) {
-                    $columns = ["Sección", "Título"];
+                    $columns = ["Sección", "Título", "DOI"];
                     for ($a = 1; $a <= $countAuthors; $a++) {
                         $columns = array_merge($columns, [
                             "Nombre (autor " . $a . ")",
@@ -45,7 +44,11 @@ class Issues extends AbstractRunner implements InterfaceRunner
                     fputcsv($file, array_values($columns));
 
                     foreach ($submissions as $submission) {
-                        $results = [$submission['section'], $submission['title']];
+                        $results = [
+                            $submission['section'],
+                            $submission['title'],
+                            $submission['doi']
+                        ];
 
                         for ($a = 1; $a <= count($submission['authors']); $a++) {
                             $results = array_merge($results, [
@@ -54,7 +57,6 @@ class Issues extends AbstractRunner implements InterfaceRunner
                                 $submission['authors'][$a - 1]['affiliation'],
                                 $submission['authors'][$a - 1]['userGroup']
                             ]);
-
                         }
                         fputcsv($file, array_values($results));
                     }
@@ -97,6 +99,7 @@ class Issues extends AbstractRunner implements InterfaceRunner
             $results[] = [
                 'title' => $submission->getCurrentPublication()->getLocalizedData('title'),
                 'section' => $section->getData('hideTitle') ? '' : $section->getLocalizedData('title'),
+                'doi' => $publication->getStoredPubId('doi') ?: '',
                 'authors' => array_map(function ($author) {
                     $userGroupDao = \DAORegistry::getDAO('UserGroupDAO'); /* @var $userGroupDao \UserGroupDAO */
                     $userGroup = $userGroupDao->getById($author->getData('userGroupId'))->getLocalizedData('name');

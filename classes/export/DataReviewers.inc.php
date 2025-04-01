@@ -25,16 +25,20 @@ class DataReviewers extends AbstractRunner implements InterfaceRunner
             $dateTo = $params['dateTo'] ?? date('Ymd', strtotime("-1 day"));
             $dateFrom = $params['dateFrom'] ?? date("Ymd", strtotime("-1 year", strtotime($dateTo)));
             $file = fopen($dirFiles . "/revisores_" . $dateFrom . "_" . $dateTo . ".csv", "w");
-            fputcsv($file, array("ID", "Nombre", "Apellidos", "Institución", "Correo electrónico"));
+            fputcsv($file, array("ID", "Nombre", "Apellidos", "Institución", "País", "Correo electrónico"));
 
             $reviewers = $this->getReviewers(array($dateFrom, $dateTo, $this->contextId));
             foreach ($reviewers as $value) {
+
                 $reviewer = get_object_vars($value);
+
+
                 fputcsv($file, array(
                     $reviewer['id'],
                     $reviewer['givenName'],
                     $reviewer['familyName'],
                     $reviewer['affiliation'],
+                    $reviewer['country'],
                     $reviewer['email']
                 ));
             }
@@ -61,7 +65,8 @@ class DataReviewers extends AbstractRunner implements InterfaceRunner
                     max(giv.setting_value) givenName,
                     max(fam.setting_value) familyName,
                     max(aff.setting_value) affiliation,
-                    u.email
+                    u.email,
+                    u.country
                 FROM
                     users u
                         left outer join user_settings giv on (u.user_id = giv.user_id and giv.setting_name = 'givenName')

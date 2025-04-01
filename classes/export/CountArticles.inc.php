@@ -8,8 +8,7 @@ use CalidadFECYT\classes\utils\ZipUtils;
 
 class CountArticles extends AbstractRunner implements InterfaceRunner
 {
-
-  private $contextId;
+  protected $contextId;
 
   public function run(&$params)
   {
@@ -31,7 +30,6 @@ class CountArticles extends AbstractRunner implements InterfaceRunner
         date('Y-m-d', strtotime($dateFrom)),
         date('Y-m-d', strtotime($dateTo)),
       );
-
 
       $data = "Nº de artículos para la revista " . \Application::getContextDAO()->getById($this->contextId)->getPath();
       $data .= " desde el " . date('d-m-Y', strtotime($dateFrom)) . " hasta el " . date('d-m-Y', strtotime($dateTo)) . "\n";
@@ -55,225 +53,144 @@ class CountArticles extends AbstractRunner implements InterfaceRunner
         $fileManager->downloadByPath($zipFilename);
       }
     } catch (\Exception $e) {
-      throw new \Exception('Se ha producido un error:' . $e->getMessage());
+      throw new \Exception('Se ha producido un error: ' . $e->getMessage());
     }
   }
 
-  public function generateCsv($query, $key, $dirFiles)
+  private function generateCsv($submissions, $type, $dirFiles)
   {
-    if ($query) {
-      $publicationDao = \DAORegistry::getDAO('PublicationDAO'); /* @var $publicationDao \PublicationDAO */
+    $file = fopen($dirFiles . "/envios_" . $type . ".csv", "w");
+    fputcsv($file, array("ID", "DOI", "Título", "Fecha"));
 
-      $file = fopen($dirFiles . "/envios_" . $key . ".csv", "w");
-      fputcsv($file, array("ID", "Fecha", "Título"));
+    foreach ($submissions as $submission) {
+      $submissionDao = \DAORegistry::getDAO('SubmissionDAO');
+      $submissionObj = $submissionDao->getById($submission['submission_id']);
+      $publication = $submissionObj->getCurrentPublication();
+      $doi = $publication->getStoredPubId('doi') ?? 'N/A';
 
-      foreach ($query as $value) {
-        $row = get_object_vars($value);
-        $publication = $publicationDao->getById($row['pub']);
+      fputcsv($file, array(
+        $submission['submission_id'],
+        $doi,
+        $submission['title'],
+        $submission['date']
+      ));
+    }
+    fclose($file);
+  }
 
-        fputcsv($file, array(
-          $row['id'],
-          date("Y-m-d", strtotime($row['date'])),
-          $publication->getLocalizedData('title', \AppLocale::getLocale()),
-        ));
+  private function countSubmissionsReceived($submissionDao, $params)
+  {
+    $submissions = $this->getSubmissionsReceived($submissionDao, $params);
+    return count($submissions);
+  }
+
+  private function countSubmissionsAccepted($submissionDao, $params)
+  {
+    $submissions = $this->getSubmissionsAccepted($submissionDao, $params);
+    return count($submissions);
+  }
+
+  private function countSubmissionsDeclined($submissionDao, $params)
+  {
+    $submissions = $this->getSubmissionsDeclined($submissionDao, $params);
+    return count($submissions);
+  }
+
+  private function countSubmissionsPublished($submissionDao, $params)
+  {
+    $submissions = $this->getSubmissionsPublished($submissionDao, $params);
+    return count($submissions);
+  }
+
+  private function getSubmissionsReceived($submissionDao, $params)
+  {
+    $contextId = $params[0];
+    $dateFrom = $params[1];
+    $dateTo = $params[2];
+    $locale = \AppLocale::getLocale();
+
+    $submissions = $submissionDao->getByContextId($contextId);
+    $filteredSubmissions = [];
+    while ($submission = $submissions->next()) {
+      $dateSubmitted = strtotime($submission->getDateSubmitted());
+      if ($dateSubmitted >= strtotime($dateFrom) && $dateSubmitted <= strtotime($dateTo)) {
+        $publication = $submission->getCurrentPublication();
+        $filteredSubmissions[] = [
+          'submission_id' => $submission->getId(),
+          'title' => $publication->getLocalizedData('title', $locale),
+          'date' => $submission->getDateSubmitted()
+        ];
       }
-      fclose($file);
     }
+    return $filteredSubmissions;
   }
 
-  public function countSubmissionsReceived($submissionDao, $params)
+  private function getSubmissionsAccepted($submissionDao, $params)
   {
-    $result = $submissionDao->retrieve(
-      "SELECT COUNT(DISTINCT s.submission_id) AS count
-	        FROM submissions s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = " . STATUS_PUBLISHED . "
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.date_submitted >= ?
-              AND s.date_submitted <= ?",
-      $params
-    )->current();
+    $contextId = $params[0];
+    $dateFrom = $params[1];
+    $dateTo = $params[2];
+    $locale = \AppLocale::getLocale();
 
-    return $result->count;
+    $submissions = $submissionDao->getByContextId($contextId);
+    $filteredSubmissions = [];
+    while ($submission = $submissions->next()) {
+      $dateSubmitted = strtotime($submission->getDateSubmitted());
+      if ($dateSubmitted >= strtotime($dateFrom) && $dateSubmitted <= strtotime($dateTo) && $submission->getStatus() == STATUS_PUBLISHED) {
+        $publication = $submission->getCurrentPublication();
+        $filteredSubmissions[] = [
+          'submission_id' => $submission->getId(),
+          'title' => $publication->getLocalizedData('title', $locale),
+          'date' => $submission->getDateSubmitted()
+        ];
+      }
+    }
+    return $filteredSubmissions;
   }
 
-  public function getSubmissionsReceived($submissionDao, $params)
+  private function getSubmissionsDeclined($submissionDao, $params)
   {
-    return $submissionDao->retrieve(
-      "SELECT DISTINCT s.submission_id as id, s.date_submitted as date, s.current_publication_id as pub
-	        FROM submissions s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = " . STATUS_PUBLISHED . "
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.date_submitted >= ?
-              AND s.date_submitted <= ?
-            GROUP BY s.submission_id, s.date_submitted, s.current_publication_id",
-      $params
-    );
+    $contextId = $params[0];
+    $dateFrom = $params[1];
+    $dateTo = $params[2];
+    $locale = \AppLocale::getLocale();
+
+    $submissions = $submissionDao->getByContextId($contextId);
+    $filteredSubmissions = [];
+    while ($submission = $submissions->next()) {
+      $dateSubmitted = strtotime($submission->getDateSubmitted());
+      if ($dateSubmitted >= strtotime($dateFrom) && $dateSubmitted <= strtotime($dateTo) && $submission->getStatus() == STATUS_DECLINED) {
+        $publication = $submission->getCurrentPublication();
+        $filteredSubmissions[] = [
+          'submission_id' => $submission->getId(),
+          'title' => $publication->getLocalizedData('title', $locale),
+          'date' => $submission->getDateSubmitted()
+        ];
+      }
+    }
+    return $filteredSubmissions;
   }
 
-  public function countSubmissionsAccepted($submissionDao, $params)
+  private function getSubmissionsPublished($submissionDao, $params)
   {
-    $result = $submissionDao->retrieve(
-      "SELECT COUNT(DISTINCT s.submission_id) AS count
-            FROM submissions as s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = " . STATUS_PUBLISHED . "
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status != " . STATUS_DECLINED . "
-              AND ed.decision = 1
-              AND ed.date_decided >= ?
-              AND ed.date_decided <= ?",
-      $params
-    )->current();
+    $contextId = $params[0];
+    $dateFrom = $params[1];
+    $dateTo = $params[2];
+    $locale = \AppLocale::getLocale();
 
-    return $result->count;
-  }
-
-  public function getSubmissionsAccepted($submissionDao, $params)
-  {
-    return $submissionDao->retrieve(
-      "SELECT DISTINCT s.submission_id as id, ed.date_decided as date, s.current_publication_id as pub
-            FROM submissions as s
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = " . STATUS_PUBLISHED . "
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status != " . STATUS_DECLINED . "
-              AND ed.decision = 1
-              AND ed.date_decided >= ?
-              AND ed.date_decided <= ?
-            GROUP BY s.submission_id, ed.date_decided, s.current_publication_id",
-      $params
-    );
-  }
-
-  public function countSubmissionsDeclined($submissionDao, $params)
-  {
-    $result = $submissionDao->retrieve(
-      "SELECT COUNT(DISTINCT s.submission_id) as count
-            FROM submissions as s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = " . STATUS_PUBLISHED . "
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status = " . STATUS_DECLINED . "
-              AND ed.decision IN(4,9)
-              AND ed.date_decided >= ?
-              AND ed.date_decided <= ?",
-      $params
-    )->current();
-
-    return $result->count;
-  }
-
-  public function getSubmissionsDeclined($submissionDao, $params)
-  {
-    return $submissionDao->retrieve(
-      "SELECT DISTINCT s.submission_id as id, ed.date_decided as date, s.current_publication_id as pub
-            FROM submissions as s
-            LEFT JOIN publications p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = " . STATUS_PUBLISHED . "
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status = " . STATUS_DECLINED . "
-              AND ed.decision IN(4,9)
-              AND ed.date_decided >= ?
-              AND ed.date_decided <= ?
-            GROUP BY s.submission_id, ed.date_decided, s.current_publication_id",
-      $params
-    );
-  }
-
-  public function countSubmissionsPublished($submissionDao, $params)
-  {
-    $result = $submissionDao->retrieve(
-      "SELECT COUNT(DISTINCT s.submission_id) as count
-            FROM submissions as s
-            LEFT JOIN publications as p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = " . STATUS_PUBLISHED . "
-                ORDER BY p2.date_published ASC
-                LIMIT 1)
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status = " . STATUS_PUBLISHED . "
-              AND p.date_published >= ?
-              AND p.date_published <= ?",
-      $params
-    )->current();
-
-    return $result->count;
-  }
-
-
-  public function getSubmissionsPublished($submissionDao, $params)
-  {
-    return $submissionDao->retrieve(
-      "SELECT DISTINCT s.submission_id as id, p.date_published as date, s.current_publication_id as pub
-            FROM submissions as s
-            LEFT JOIN publications as p on p.publication_id = (
-                SELECT p2.publication_id
-                FROM publications as p2
-                WHERE p2.submission_id = s.submission_id
-                  AND p2.status = " . STATUS_PUBLISHED . "
-                LIMIT 1)
-            LEFT JOIN edit_decisions as ed on s.submission_id = ed.submission_id
-            WHERE s.context_id = ?
-              AND s.submission_progress = 0
-              AND (p.date_published IS NULL OR s.date_submitted < p.date_published)
-              AND s.status = " . STATUS_PUBLISHED . "
-              AND p.date_published >= ?
-              AND p.date_published <= ?
-            GROUP BY s.submission_id, p.date_published, s.current_publication_id",
-      $params
-    );
+    $submissions = $submissionDao->getByContextId($contextId);
+    $filteredSubmissions = [];
+    while ($submission = $submissions->next()) {
+      $publication = $submission->getCurrentPublication();
+      $datePublished = $publication ? $publication->getData('datePublished') : null; // Corregido aquí
+      if ($datePublished && strtotime($datePublished) >= strtotime($dateFrom) && strtotime($datePublished) <= strtotime($dateTo) && $submission->getStatus() == STATUS_PUBLISHED) {
+        $filteredSubmissions[] = [
+          'submission_id' => $submission->getId(),
+          'title' => $publication->getLocalizedData('title', $locale),
+          'date' => $datePublished
+        ];
+      }
+    }
+    return $filteredSubmissions;
   }
 }

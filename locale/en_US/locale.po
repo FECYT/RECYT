@@ -99,3 +99,10 @@ msgstr "From: "
 
 msgid "plugins.generic.calidadfecyt.dateTo"
 msgstr "To: "
+
+# URLs
+msgid "plugins.generic.calidadfecyt.editorialProcess"
+msgstr "Editorial Process, Periodicity, Policy, Ethics, Preservation"
+
+msgid "plugins.generic.calidadfecyt.editorialTeam"
+msgstr "Editorial Team"

@@ -99,3 +99,12 @@ msgstr "Desde: "
 
 msgid "plugins.generic.calidadfecyt.dateTo"
 msgstr "Hasta: "
+
+# URLs
+msgid "plugins.generic.calidadfecyt.editorialProcess"
+msgstr "Proceso editorial, periodicidad, política, ética, preservación"
+
+msgid "plugins.generic.calidadfecyt.editorialTeam"
+msgstr "Equipo editorial"
+
+
