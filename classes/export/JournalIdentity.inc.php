@@ -21,7 +21,6 @@ class JournalIdentity extends AbstractRunner implements InterfaceRunner
         $this->contextId = $context->getId();
 
         try {
-            dump($context);
             $text = "Datos de la revista\n";
             $text .= "Nombre: " . $context->getSetting('name', \AppLocale::getLocale()) . "\n";
             $text .= "ISSN: " . $context->getSetting('printIssn') . "\n";
