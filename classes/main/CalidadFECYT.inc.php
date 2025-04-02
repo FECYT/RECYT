@@ -29,6 +29,7 @@ class CalidadFECYT
         import('plugins.generic.calidadfecyt.classes.utils.ZipUtils');
         import('plugins.generic.calidadfecyt.classes.utils.HTTPUtils');
         import('plugins.generic.calidadfecyt.classes.utils.FileUtils');
+        import('plugins.generic.calidadfecyt.classes.utils.LocaleUtils');
         import('plugins.generic.calidadfecyt.classes.abstracts.AbstractRunner');
         import('plugins.generic.calidadfecyt.classes.interfaces.InterfaceRunner');
         import('plugins.generic.calidadfecyt.classes.export.Editorial');

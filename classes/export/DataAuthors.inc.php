@@ -5,6 +5,8 @@ namespace CalidadFECYT\classes\export;
 use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
+use CalidadFECYT\classes\utils\LocaleUtils;
+
 
 class DataAuthors extends AbstractRunner implements InterfaceRunner
 {
@@ -42,9 +44,9 @@ class DataAuthors extends AbstractRunner implements InterfaceRunner
                         $submissionObj->getId(),
                         $doi,
                         $author->getId(),
-                        $author->getData('givenName', $locale),
-                        $author->getData('familyName', $locale),
-                        $author->getData('affiliation', $locale),
+                        LocaleUtils::getLocalizedDataWithFallback($author, 'givenName', $locale),
+                        LocaleUtils::getLocalizedDataWithFallback($author, 'familyName', $locale),
+                        LocaleUtils::getLocalizedDataWithFallback($author, 'affiliation', $locale),
                         $author->getData('country'),
                         $author->getData('email'),
                     ));

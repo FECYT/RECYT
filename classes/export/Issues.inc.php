@@ -5,7 +5,7 @@ namespace CalidadFECYT\classes\export;
 use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
-
+use CalidadFECYT\classes\utils\LocaleUtils;
 class Issues extends AbstractRunner implements InterfaceRunner
 {
     private $contextId;
@@ -105,10 +105,11 @@ class Issues extends AbstractRunner implements InterfaceRunner
                     $userGroup = $userGroupDao->getById($author->getData('userGroupId'))->getLocalizedData('name');
 
                     return [
-                        'givenName' => $author->getLocalizedGivenName(),
-                        'familyName' => $author->getLocalizedFamilyName(),
-                        'affiliation' => $author->getLocalizedData('affiliation'),
-                        'userGroup' => $userGroup ?? ''
+                        'givenName' => LocaleUtils::getLocalizedDataWithFallback($author, 'givenName'),
+                        'familyName' => LocaleUtils::getLocalizedDataWithFallback($author, 'familyName'),
+                        'affiliation' => LocaleUtils::getLocalizedDataWithFallback($author, 'affiliation'),
+                        'userGroup' => $userGroup ?? '',
+                        'country' => $author->getCountry() ?? ''
                     ];
                 }, $publication->getData('authors'))
             ];
