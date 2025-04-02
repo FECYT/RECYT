@@ -19,10 +19,10 @@ class CalidadFECYT
         "DataReviewers",
         "Issues",
         "JournalIdentity",
+        "Statistics",
         "SubmissionInfo",
         "URLs",
     ];
-
     private function imports()
     {
         import('plugins.generic.calidadfecyt.classes.utils.LogUtils');

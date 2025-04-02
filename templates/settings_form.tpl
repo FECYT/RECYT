@@ -45,7 +45,6 @@
 		<p class="pkpHeader__title">
 			<legend>{translate key="plugins.generic.calidadfecyt.export.single"}</legend>
 		</p>
-
 		{if $linkActions}
 			{foreach from=$linkActions item=exportAction}
 				<fieldset class="pkpFormField pkpFormField--options">
@@ -54,12 +53,11 @@
 					</legend>
 					<button id="{$exportAction->name|cat:'Button'}" type="submit" class="pkpButton"
 						onclick="document.getElementById('verb').value='export'; document.getElementById('exportIndex').value='{$exportAction->index}';">
-						{translate key="plugins.generic.calidadfecyt.export."|cat:$exportAction->name}
+						{translate key="plugins.generic.calidadfecyt.exportAll"}
 					</button>
 				</fieldset>
 			{/foreach}
 		{/if}
-
 		<div class="separator"></div>
 		<br />
 
@@ -83,7 +81,6 @@
 			</button>
 		</fieldset>
 	</form>
-
 	<script>
 		document.getElementById('exportForm').addEventListener('submit', function(e) {
 			e.preventDefault();
