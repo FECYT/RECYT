@@ -476,6 +476,7 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             'includeDependentFiles' => true,
         ]);
 
+
         if ($submissionFileSubmission) {
             $mainFolder = $dirFiles . '/Archivos';
             if (!$fileManager->fileExists($mainFolder))
@@ -483,6 +484,7 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             $listId = "";
 
             foreach ($submissionFileSubmission as $submissionFile) {
+
                 $id = $submissionFile->getId();
                 $path = \Config::getVar('files', 'files_dir') . '/' . $submissionFile->getData('path');
                 $folder = $mainFolder . '/';

@@ -95,7 +95,6 @@ class Issues extends AbstractRunner implements InterfaceRunner
 
             $sectionId = $submission->getCurrentPublication()->getData('sectionId');
             $section = \Application::get()->getSectionDao()->getById($sectionId);
-
             $results[] = [
                 'title' => $submission->getCurrentPublication()->getLocalizedData('title'),
                 'section' => $section->getData('hideTitle') ? '' : $section->getLocalizedData('title'),

@@ -68,7 +68,7 @@ class DataAuthors extends AbstractRunner implements InterfaceRunner
     private function getSubmissions($dateFrom, $dateTo)
     {
         $submissionDao = \DAORegistry::getDAO('SubmissionDAO');
-        $rangeInfo = null; // Para paginación, si es necesario
+        $rangeInfo = null;
         $submissions = $submissionDao->getByContextId($this->contextId, $rangeInfo);
 
         $filteredSubmissions = [];

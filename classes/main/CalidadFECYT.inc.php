@@ -221,4 +221,30 @@ class CalidadFECYT
             throw new \Exception("Invalid parameters");
         }
     }
+    public function getStatsContent()
+    {
+        $fileManager = new \FileManager();
+        $timestamp = date('YmdHis');
+        $context = $this->params['context'];
+        $tempDirectoryName = FileUtils::filterFilename($context->getId() . '_' . $timestamp . '_Statistics');
+        $temporaryFullFilePath = OJS_FILES_TEMPORARY_DIRECTORY . '/' . $tempDirectoryName;
+
+        if (!$fileManager->fileExists($temporaryFullFilePath)) {
+            $fileManager->mkdirtree($temporaryFullFilePath);
+        }
+
+        $this->params['temporaryFullFilePath'] = $temporaryFullFilePath;
+        $exporter = new \ReflectionClass("CalidadFECYT\\classes\\export\\Statistics");
+        $exporterInstance = $exporter->newInstanceArgs(array());
+        $exporterInstance->run($this->params);
+
+        $summaryFile = $temporaryFullFilePath . '/summary.txt';
+        if ($fileManager->fileExists($summaryFile)) {
+            $content = file_get_contents($summaryFile);
+            $fileManager->rmtree($temporaryFullFilePath);
+            return $content;
+        } else {
+            throw new \Exception("No se pudo generar el archivo summary.txt");
+        }
+    }
 }

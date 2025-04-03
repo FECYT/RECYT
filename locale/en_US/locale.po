@@ -132,8 +132,15 @@ msgstr "Accepted Recommendations"
 msgid "plugins.generic.calidadfecyt.stats.csv.declined"
 msgstr "Declined Recommendations"
 
+# Statistics Text
 msgid "plugins.generic.calidadfecyt.stats.header"
 msgstr "Reviewers of the journal for the year %s and rejection rate"
 
 msgid "plugins.generic.calidadfecyt.stats.summary"
 msgstr "On the digital platform of Teoría de la Educación. Revista Interuniversitaria, a total of %1$d articles were received during %2$s. Of these, during %3$s, %4$d were published with a rejection rate of %5$.1f%%. The article evaluation process was double-blind, involving %6$d reviewers. %7$.1f%% of the reviewers are from foreign scientific institutions."
+
+msgid "plugins.generic.calidadfecyt.stats.menu"
+msgstr "Journal reviewers and rejection rate"
+
+msgid "plugins.generic.calidadfecyt.stats.menu.description"
+msgstr "Displays a summary of submission and reviewer statistics for the last completed year."

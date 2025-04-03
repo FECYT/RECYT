@@ -138,3 +138,9 @@ msgstr "Evaluadores de la revista del año %s y tasa de rechazo"
 
 msgid "plugins.generic.calidadfecyt.stats.summary"
 msgstr "En la plataforma digital de Teoría de la Educación. Revista Interuniversitaria se recibieron durante %2$s un total de %1$d artículos. De los cuales, durante %3$s, han sido publicados %4$d con una tasa de rechazo del %5$.1f%%. El proceso de evaluación de los artículos ha sido doblemente anónimo, con participación de %6$d revisores. El %7$.1f%% de los revisores pertenece a instituciones científicas extranjeras."
+
+msgid "plugins.generic.calidadfecyt.stats.menu"
+msgstr "Evaluadores de la revista y tasa de rechazo"
+
+msgid "plugins.generic.calidadfecyt.stats.menu.description"
+msgstr "Muestra un resumen de estadísticas de envíos y revisores del último año completo."

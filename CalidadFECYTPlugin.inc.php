@@ -2,6 +2,10 @@
 
 require_once(__DIR__ . '/vendor/autoload.php');
 import('lib.pkp.classes.plugins.GenericPlugin');
+import('lib.pkp.classes.navigationMenu.NavigationMenuItem');
+import('lib.pkp.classes.navigationMenu.NavigationMenuItemDAO');
+
+require_once(__DIR__ . '/classes/main/CalidadFECYT.inc.php');
 
 use CalidadFECYT\classes\main\CalidadFECYT;
 
@@ -14,9 +18,9 @@ class CalidadFECYTPlugin extends GenericPlugin
             return true;
         }
         $this->addLocaleData();
-        if ($success && $this->getEnabled($mainContextId)) {
 
-            return $success;
+        if ($success && $this->getEnabled($mainContextId)) {
+            $this->addStatsNavigationMenuItem($mainContextId);
         }
         return $success;
     }
@@ -60,6 +64,34 @@ class CalidadFECYTPlugin extends GenericPlugin
             )), $this->getDisplayName()), __('manager.plugins.settings'), null)
         ) : array(), parent::getActions($request, $verb));
     }
+
+    private function addStatsNavigationMenuItem($contextId)
+    {
+        $request = $this->getRequest();
+        $context = $request->getContext();
+        $contextId = $context ? $context->getId() : CONTEXT_ID_NONE;
+
+        $navigationMenuItemDao = DAORegistry::getDAO('NavigationMenuItemDAO');
+        $navigationMenuItem = $navigationMenuItemDao->getByPath($contextId, 'fecyt-stats');
+        $statsContent = $this->generateStatsContent($context);
+
+        if (!$navigationMenuItem) {
+            $navigationMenuItem = $navigationMenuItemDao->newDataObject();
+            $navigationMenuItem->setPath('fecyt-stats');
+            $navigationMenuItem->setType('NMI_TYPE_CUSTOM');
+            $navigationMenuItem->setContextId($contextId);
+            $navigationMenuItem->setTitle(__('plugins.generic.calidadfecyt.stats.menu'), 'en_US');
+            $navigationMenuItem->setContent($statsContent, 'en_US');
+
+            $navigationMenuItemId = $navigationMenuItemDao->insertObject($navigationMenuItem);
+
+            $this->assignToNavigationMenu($navigationMenuItemId, $contextId);
+        } else {
+            $navigationMenuItem->setContent($statsContent, 'en_US');
+            $navigationMenuItemDao->updateObject($navigationMenuItem);
+        }
+    }
+
 
     public function manage($args, $request)
     {
@@ -154,7 +186,126 @@ class CalidadFECYTPlugin extends GenericPlugin
 
         return parent::manage($args, $request);
     }
+    private function generateStatsContent($context)
+    {
+        if (!$context) {
+            return "<h2>FECYT Statistics</h2><p>Error: Revista no encontrada</p>";
+        }
 
+        $contextId = $context->getId();
+
+        try {
+            $currentYear = date('Y');
+            $lastCompletedYear = $currentYear - 1;
+            $summaryDateFrom = date('Ymd', strtotime("$lastCompletedYear-01-01"));
+            $summaryDateTo = date('Ymd', strtotime("$lastCompletedYear-12-31"));
+
+            $submissionStats = $this->getSubmissionStats($contextId, $summaryDateFrom, $summaryDateTo);
+            $reviewerDetails = $this->getReviewerDetails($contextId, $summaryDateFrom, $summaryDateTo);
+
+            $totalReceived = $submissionStats['received'];
+            $totalPublished = $submissionStats['published'];
+            $totalDeclined = $submissionStats['declined'];
+            $rejectionRate = $totalReceived > 0 ? round(($totalDeclined / $totalReceived) * 100, 1) : 0;
+
+            $totalReviewers = $reviewerDetails['totalReviewers'];
+            $foreignReviewers = $reviewerDetails['foreignReviewers'];
+            $foreignPercentage = $totalReviewers > 0 ? round(($foreignReviewers / $totalReviewers) * 100, 1) : 0;
+            $statsContent = "<h2>" . sprintf(__("plugins.generic.calidadfecyt.stats.header"), $lastCompletedYear) . "</h2>";
+            $statsContent .= "<p>" . sprintf(
+                __("plugins.generic.calidadfecyt.stats.summary"),
+                $totalReceived,
+                $lastCompletedYear,
+                $lastCompletedYear,
+                $totalPublished,
+                $rejectionRate,
+                $totalReviewers,
+                $foreignPercentage
+            ) . "</p>";
+            $statsContent .= "<h3>Reviewers</h3><ul>";
+            foreach ($reviewerDetails['reviewers'] as $reviewer) {
+                $statsContent .= "<li>" . htmlspecialchars($reviewer['fullName']) .
+                    ($reviewer["affiliation"] && $reviewer["affiliation"] !== 'Unknown Affiliation' ? " (" . htmlspecialchars($reviewer["affiliation"]) . ")" : "") .
+                    "</li>";
+            }
+            $statsContent .= "</ul>";
+
+            return $statsContent;
+        } catch (\Exception $e) {
+            return "<h2>FECYT Statistics</h2><p>Error: " . htmlspecialchars($e->getMessage()) . "</p>";
+        }
+    }
+
+    private function getSubmissionStats($contextId, $dateFrom, $dateTo)
+    {
+        $submissionDao = \DAORegistry::getDAO('SubmissionDAO');
+        $submissions = $submissionDao->getByContextId($contextId);
+
+        $stats = ['received' => 0, 'accepted' => 0, 'declined' => 0, 'published' => 0];
+        while ($submission = $submissions->next()) {
+            $dateSubmitted = strtotime($submission->getDateSubmitted());
+            $publication = $submission->getCurrentPublication();
+            $datePublished = $publication ? strtotime($publication->getData('datePublished')) : null;
+            $status = $submission->getStatus();
+
+            if ($dateSubmitted >= strtotime($dateFrom) && $dateSubmitted <= strtotime($dateTo)) {
+                $stats['received']++;
+                if ($status == STATUS_PUBLISHED && $datePublished && $datePublished <= strtotime($dateTo)) {
+                    $stats['accepted']++;
+                    $stats['published']++;
+                }
+                if ($status == STATUS_DECLINED) {
+                    $stats['declined']++;
+                }
+            }
+        }
+        return $stats;
+    }
+    private function getReviewerDetails($contextId, $dateFrom, $dateTo)
+    {
+        $reviewAssignmentDao = \DAORegistry::getDAO('ReviewAssignmentDAO');
+        $userDao = \DAORegistry::getDAO('UserDAO');
+
+        $reviewersResult = $reviewAssignmentDao->retrieve(
+            "SELECT DISTINCT ra.reviewer_id 
+             FROM review_assignments ra 
+             JOIN submissions s ON ra.submission_id = s.submission_id 
+             WHERE s.context_id = ? 
+             AND ra.date_completed IS NOT NULL 
+             AND ra.date_completed BETWEEN ? AND ?",
+            [$contextId, date('Y-m-d', strtotime($dateFrom)), date('Y-m-d', strtotime($dateTo))]
+        );
+
+        $reviewers = [];
+        $foreignReviewers = 0;
+        $totalReviewers = 0;
+
+        foreach ($reviewersResult as $row) {
+            $reviewerId = $row->reviewer_id;
+            $user = $userDao->getById($reviewerId);
+            if ($user) {
+                $fullName = $user->getFullName();
+                $affiliation = $user->getLocalizedAffiliation() ?: 'Unknown Affiliation';
+                $country = $user->getCountry() ?: 'Unknown';
+
+                $reviewers[] = [
+                    'fullName' => $fullName,
+                    'affiliation' => $affiliation
+                ];
+
+                if ($country !== 'ES') {
+                    $foreignReviewers++;
+                }
+                $totalReviewers++;
+            }
+        }
+
+        return [
+            'reviewers' => $reviewers,
+            'foreignReviewers' => $foreignReviewers,
+            'totalReviewers' => $totalReviewers
+        ];
+    }
     public function getSubmissions($contextId)
     {
         $locale = AppLocale::getLocale();
