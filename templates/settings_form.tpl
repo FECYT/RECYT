@@ -3,14 +3,11 @@
 		{translate key="plugins.generic.calidadfecyt.description"}
 	</div>
 
-	<div class="separator"></div>
-	<br />
 
-	<form id="exportForm" method="get" action="{$baseUrl|escape}">
-		<input type="hidden" name="plugin" value="CalidadFECYTPlugin">
-		<input type="hidden" name="category" value="generic">
-		<input type="hidden" name="verb" id="verb" value="">
-		<input type="hidden" name="exportIndex" id="exportIndex" value="">
+	<form id="exportForm" method="get" action="{$editorialUrl|escape}">
+
+		<div class="separator"></div>
+		<br />
 
 		<fieldset class="pkpFormField pkpFormField--options">
 			<legend>{translate key="plugins.generic.calidadfecyt.dateRange"}</legend>
@@ -23,7 +20,6 @@
 
 		<div class="separator"></div>
 		<br />
-
 		{if $exportAllAction}
 			<p class="pkpHeader__title">
 				<legend>{translate key="plugins.generic.calidadfecyt.export.all"}</legend>
@@ -58,6 +54,7 @@
 				</fieldset>
 			{/foreach}
 		{/if}
+
 		<div class="separator"></div>
 		<br />
 
@@ -69,6 +66,12 @@
 			<legend>
 				{translate key="plugins.generic.calidadfecyt.export.editorial.description"}
 			</legend>
+
+
+			<input type="hidden" name="plugin" value="CalidadFECYTPlugin">
+			<input type="hidden" name="category" value="generic">
+			<input type="hidden" name="verb" id="verb" value="">
+			<input type="hidden" name="exportIndex" id="exportIndex" value="">
 			<select name="submission" id="submission" style="width: 90%; margin-bottom: 10px">
 				{foreach from=$submissions item=submission}
 					<option value="{$submission['id']}">{$submission['id']} - {$submission['title']}</option>
@@ -79,15 +82,10 @@
 				onclick="document.getElementById('verb').value='editorial';">
 				{translate key="plugins.generic.calidadfecyt.export.editorial"}
 			</button>
-		</fieldset>
 	</form>
-	<script>
-		document.getElementById('exportForm').addEventListener('submit', function(e) {
-			e.preventDefault();
-			var form = this;
-			var params = new URLSearchParams(new FormData(form)).toString();
-			var url = form.action + '?' + params;
-			window.location.href = url;
-		});
-	</script>
+	</fieldset>
 </div>
+<script>
+	window.noSubmissionsMessage = '{$noSubmissionsMessage|escape:javascript}';
+	window.fetchSubmissionsUrl = '{$fetchSubmissionsUrl|escape:javascript}';
+</script>

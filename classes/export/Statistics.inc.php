@@ -38,7 +38,7 @@ class Statistics extends AbstractRunner implements InterfaceRunner
             $totalPublished = $submissionStats['published'];
             $totalDeclined = $submissionStats['declined'];
             $rejectionRate = $totalReceived > 0 ? round(($totalDeclined / $totalReceived) * 100, 1) : 0;
-
+            $journalName = $context->getLocalizedName();
             $totalReviewers = $reviewerDetails['totalReviewers'] ?? count($reviewerDetails['reviewers']);
             $foreignReviewers = $reviewerDetails['foreignReviewers'];
             $foreignPercentage = $totalReviewers > 0 ? round(($foreignReviewers / $totalReviewers) * 100, 1) : 0;
@@ -52,7 +52,8 @@ class Statistics extends AbstractRunner implements InterfaceRunner
                 $totalPublished,
                 $rejectionRate,
                 $totalReviewers,
-                $foreignPercentage
+                $foreignPercentage,
+                $journalName
             ) . "\n\n";
 
             foreach ($reviewerDetails['reviewers'] as $reviewer) {

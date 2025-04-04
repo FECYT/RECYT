@@ -32,25 +32,25 @@ class DataAuthors extends AbstractRunner implements InterfaceRunner
 
             $submissions = $this->getSubmissions($dateFrom, $dateTo);
             foreach ($submissions as $submission) {
-                $submissionDao = \DAORegistry::getDAO('SubmissionDAO');
-                $submissionObj = $submissionDao->getById($submission->submission_id);
-                $publication = $submissionObj->getCurrentPublication();
-                $doi = $publication->getStoredPubId('doi') ?? 'N/A';
-                $authors = $submissionObj->getAuthors();
+                $publication = $submission->getCurrentPublication();
+                $doi = $publication->getStoredPubId('doi') ?? '';
+                $authors = $submission->getAuthors();
 
                 foreach ($authors as $author) {
-
+                    $isForeign = $author->getData('country') ? ($author->getData('country') !== 'ES' ? 'Sí' : 'No') : '';
                     fputcsv($file, array(
-                        $submissionObj->getId(),
+                        $submission->getId(),
                         $doi,
                         $author->getId(),
                         LocaleUtils::getLocalizedDataWithFallback($author, 'givenName', $locale),
                         LocaleUtils::getLocalizedDataWithFallback($author, 'familyName', $locale),
                         LocaleUtils::getLocalizedDataWithFallback($author, 'affiliation', $locale),
                         $author->getData('country'),
+                        $isForeign,
                         $author->getData('email'),
                     ));
                 }
+
             }
 
             fclose($file);
@@ -72,12 +72,16 @@ class DataAuthors extends AbstractRunner implements InterfaceRunner
         $submissions = $submissionDao->getByContextId($this->contextId, $rangeInfo);
 
         $filteredSubmissions = [];
+
         while ($submission = $submissions->next()) {
-            $dateSubmitted = strtotime($submission->getDateSubmitted());
-            if ($dateSubmitted >= strtotime($dateFrom) && $dateSubmitted <= strtotime($dateTo)) {
-                $filteredSubmissions[] = (object) [
-                    'submission_id' => $submission->getId()
-                ];
+            $publication = $submission->getCurrentPublication();
+            if ($publication) {
+
+                $datePublished = strtotime($publication->getData('datePublished'));
+
+                if ($datePublished >= strtotime($dateFrom) && $datePublished <= strtotime($dateTo)) {
+                    $filteredSubmissions[] = $submission;
+                }
             }
         }
         return $filteredSubmissions;

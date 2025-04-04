@@ -31,8 +31,7 @@ class Editorial extends AbstractRunner implements InterfaceRunner
         $dirFiles = $params['temporaryFullFilePath'];
 
         try {
-
-            $reviewAssignmentDao = \DAORegistry::getDAO('ReviewAssignmentDAO');
+            $reviewAssignmentDao = \DAORegistry::getDAO('ReviewAssignmentDAO'); /* @var $reviewAssignmentDao \ReviewAssignmentDAO */
             \AppLocale::requireComponents(LOCALE_COMPONENT_PKP_SUBMISSION, LOCALE_COMPONENT_PKP_USER, LOCALE_COMPONENT_APP_SUBMISSION);
 
             $this->generateReviewReport($reviewAssignmentDao, $context, $submission, $dirFiles);
@@ -130,7 +129,6 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             die("Error al escribir en el archivo CSV\n");
 
         foreach ($reviewsIterator as $row) {
-
             if (substr($row->date_response_due, 11) === '00:00:00') {
                 $row->date_response_due = substr($row->date_response_due, 0, 11) . '23:59:59';
             }
@@ -142,8 +140,6 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             $row->overdue = $overdueDays;
 
             foreach ($columns as $index => $junk)
-
-
                 switch ($index) {
                     case 'stage_id':
                         $columns[$index] = __(\WorkflowStageDAO::getTranslationKeyFromId($row->$index));
@@ -380,28 +376,7 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             return $a->date < $b->date ? 1 : -1;
         });
 
-        $filePath = $dirFiles . "/Historial.csv";
-        $file = fopen($filePath, "w");
-        if ($file === false) {
-            error_log("No se pudo abrir el archivo Historial.csv en: $filePath");
-            throw new \Exception("No se pudo crear el archivo Historial.csv");
-        }
-
-        fwrite($file, "\xEF\xBB\xBF");
-
-        $headers = [
-            __('common.id'),
-            __('common.user'),
-            __('common.date'),
-            __('common.event')
-        ];
-
-        if (fputcsv($file, $headers) === false) {
-            error_log("Error al escribir las cabeceras en Historial.csv");
-        } else {
-            error_log("Cabeceras escritas correctamente en Historial.csv: " . implode(',', $headers));
-        }
-
+        $file = fopen($dirFiles . "/Historial.csv", "w");
         $userDao = \DAORegistry::getDAO('UserDAO'); /* @var $userDao \UserDAO */
         $eventLogDao = \DAORegistry::getDAO('SubmissionEventLogDAO'); /* @var $submissionEventLogDao \SubmissionEventLogDAO */
 
@@ -409,26 +384,27 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             if ($entry->message) {
                 $eventLog = $eventLogDao->getById($entry->id);
                 $eventParams = $eventLog->getParams();
+
                 fputcsv($file, array(
                     $entry->id,
                     $userDao->getUserFullName($entry->user_id),
                     date("Y-m-d", strtotime($entry->date)),
                     __($eventLog->getMessage(), array(
-                        'authorName' => $eventParams['authorName'] ?? '',
-                        'editorName' => $eventParams['editorName'] ?? '',
-                        'submissionId' => $eventParams['submissionId'] ?? '',
-                        'decision' => $eventParams['decision'] ?? '',
-                        'round' => $eventParams['round'] ?? '',
-                        'reviewerName' => $eventParams['reviewerName'] ?? '',
-                        'fileId' => $eventParams['fileId'] ?? '',
-                        'username' => $eventParams['username'] ?? '',
-                        'name' => $eventParams['name'] ?? '',
-                        'originalFileName' => $eventParams['originalFileName'] ?? '',
-                        'title' => $eventParams['title'] ?? '',
-                        'userGroupName' => $eventParams['userGroupName'] ?? '',
-                        'fileRevision' => $eventParams['fileRevision'] ?? '',
-                        'userName' => $eventParams['userName'] ?? '',
-                        'submissionFileId' => $eventParams['submissionFileId'] ?? '',
+                        'authorName' => $eventParams['authorName'],
+                        'editorName' => $eventParams['editorName'],
+                        'submissionId' => $eventParams['submissionId'],
+                        'decision' => $eventParams['decision'],
+                        'round' => $eventParams['round'],
+                        'reviewerName' => $eventParams['reviewerName'],
+                        'fileId' => $eventParams['fileId'],
+                        'username' => $eventParams['username'],
+                        'name' => $eventParams['name'],
+                        'originalFileName' => $eventParams['originalFileName'],
+                        'title' => $eventParams['title'],
+                        'userGroupName' => $eventParams['userGroupName'],
+                        'fileRevision' => $eventParams['fileRevision'],
+                        'userName' => $eventParams['userName'],
+                        'submissionFileId' => $eventParams['submissionFileId'],
                     )),
                 ));
             } else {
@@ -437,12 +413,16 @@ class Editorial extends AbstractRunner implements InterfaceRunner
                     $userDao->getUserFullName($entry->sender_id),
                     date("Y-m-d", strtotime($entry->date)),
                     __('submission.event.subjectPrefix') . ' ' . $entry->subject,
+                    strip_tags($entry->body),
                 ));
             }
         }
 
+        rewind($file);
+        $csvContent = stream_get_contents($file);
         fclose($file);
     }
+
     public function getEventLog($submission)
     {
         $eventLogDao = \DAORegistry::getDAO('SubmissionEventLogDAO'); /* @var $eventLogDao \SubmissionEventLogDAO */
@@ -476,7 +456,6 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             'includeDependentFiles' => true,
         ]);
 
-
         if ($submissionFileSubmission) {
             $mainFolder = $dirFiles . '/Archivos';
             if (!$fileManager->fileExists($mainFolder))
@@ -484,7 +463,6 @@ class Editorial extends AbstractRunner implements InterfaceRunner
             $listId = "";
 
             foreach ($submissionFileSubmission as $submissionFile) {
-
                 $id = $submissionFile->getId();
                 $path = \Config::getVar('files', 'files_dir') . '/' . $submissionFile->getData('path');
                 $folder = $mainFolder . '/';

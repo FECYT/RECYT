@@ -6,15 +6,16 @@ use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
 use CalidadFECYT\classes\utils\LocaleUtils;
+
 class Issues extends AbstractRunner implements InterfaceRunner
 {
     private $contextId;
-
     public function run(&$params)
     {
         $fileManager = new \FileManager();
-        $context = $params["context"];
-        $dirFiles = $params['temporaryFullFilePath'];
+        $context = $params["context"] ?? null;
+        $dirFiles = $params['temporaryFullFilePath'] ?? '';
+
         if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
@@ -32,7 +33,8 @@ class Issues extends AbstractRunner implements InterfaceRunner
                 $file = fopen($dirFiles . $nameFile . ".csv", "w");
 
                 if (!empty($data['results'])) {
-                    $columns = ["Sección", "Título", "DOI"];
+
+                    $columns = [];
                     for ($a = 1; $a <= $countAuthors; $a++) {
                         $columns = array_merge($columns, [
                             "Nombre (autor " . $a . ")",
@@ -41,27 +43,54 @@ class Issues extends AbstractRunner implements InterfaceRunner
                             "Rol (autor " . $a . ")",
                         ]);
                     }
+
+                    $columns = array_merge($columns, [
+                        "Sección",
+                        "Filiación extranjera",
+                        "Título",
+                        "DOI",
+                        "Número de autores"
+                    ]);
                     fputcsv($file, array_values($columns));
 
                     foreach ($submissions as $submission) {
-                        $results = [
-                            $submission['section'],
-                            $submission['title'],
-                            $submission['doi']
-                        ];
+                        $authorCount = count($submission['authors']);
 
-                        for ($a = 1; $a <= count($submission['authors']); $a++) {
-                            $results = array_merge($results, [
-                                $submission['authors'][$a - 1]['givenName'],
-                                $submission['authors'][$a - 1]['familyName'],
-                                $submission['authors'][$a - 1]['affiliation'],
-                                $submission['authors'][$a - 1]['userGroup']
-                            ]);
+                        $hasForeignAuthor = false;
+                        foreach ($submission['authors'] as $author) {
+                            if ($author['country'] && $author['country'] !== 'ES') {
+                                $hasForeignAuthor = true;
+                                break;
+                            }
                         }
+                        $isForeign = $hasForeignAuthor ? 'Sí' : 'No';
+
+                        $results = [];
+                        for ($a = 1; $a <= $countAuthors; $a++) {
+                            if ($a <= count($submission['authors'])) {
+                                $results = array_merge($results, [
+                                    $submission['authors'][$a - 1]['givenName'],
+                                    $submission['authors'][$a - 1]['familyName'],
+                                    $submission['authors'][$a - 1]['affiliation'],
+                                    $submission['authors'][$a - 1]['userGroup']
+                                ]);
+                            } else {
+
+                                $results = array_merge($results, ['', '', '', '']);
+                            }
+                        }
+                        $results = array_merge($results, [
+                            $submission['section'],
+                            $isForeign,
+                            $submission['title'],
+                            $submission['doi'],
+                            $authorCount
+                        ]);
+
                         fputcsv($file, array_values($results));
                     }
                 } else {
-                    fputcsv($file, array("Este envío no tiene artículos"));
+                    fputcsv($file, ["Este envío no tiene artículos"]);
                 }
 
                 fclose($file);
@@ -73,10 +102,9 @@ class Issues extends AbstractRunner implements InterfaceRunner
                 $fileManager->downloadByPath($zipFilename);
             }
         } catch (\Exception $e) {
-            throw new \Exception('Se ha producido un error:' . $e->getMessage());
+            throw new \Exception('Se ha producido un error: ' . $e->getMessage());
         }
     }
-
     public function getData($issue)
     {
         $issueSubmissions = iterator_to_array(\Services::get('submission')->getMany([
@@ -92,7 +120,6 @@ class Issues extends AbstractRunner implements InterfaceRunner
         foreach ($issueSubmissions as $submission) {
             $publication = $submission->getCurrentPublication();
             $maxAuthors = max($maxAuthors, count($publication->getData('authors')));
-
             $sectionId = $submission->getCurrentPublication()->getData('sectionId');
             $section = \Application::get()->getSectionDao()->getById($sectionId);
             $results[] = [

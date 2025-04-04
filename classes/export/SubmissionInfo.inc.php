@@ -6,7 +6,8 @@ use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\HTTPUtils;
 
-class SubmissionInfo extends AbstractRunner implements InterfaceRunner {
+class SubmissionInfo extends AbstractRunner implements InterfaceRunner
+{
 
     private $contextId;
 
@@ -14,7 +15,7 @@ class SubmissionInfo extends AbstractRunner implements InterfaceRunner {
     {
         $context = $params["context"];
         $dirFiles = $params['temporaryFullFilePath'];
-        if(!$context) {
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
         $this->contextId = $context->getId();
@@ -58,7 +59,7 @@ class SubmissionInfo extends AbstractRunner implements InterfaceRunner {
                 $text .= __('about.privacyStatement') . "\n\n" . $privacyStatement . "\n";
             }
 
-            if(isset($params['exportAll'])) {
+            if (isset($params['exportAll'])) {
                 file_put_contents($dirFiles . '/envios.txt', $text);
             } else {
                 HTTPUtils::sendStringAsFile($text, "text/plain", "envios.txt");
@@ -75,8 +76,8 @@ class SubmissionInfo extends AbstractRunner implements InterfaceRunner {
             SELECT setting_value
             FROM journal_settings
             WHERE setting_name='submissionChecklist'
-            AND journal_id=".$this->contextId."
-            AND locale='".$locale."';
+            AND journal_id=" . $this->contextId . "
+            AND locale='" . $locale . "';
         ");
 
         $content = '';
@@ -86,7 +87,8 @@ class SubmissionInfo extends AbstractRunner implements InterfaceRunner {
             $data = unserialize($fixedValue);
 
             foreach ($data as $value) {
-                if(!empty($value['content'])) $content .= '-'.strip_tags($value['content'])."\n\n";
+                if (!empty($value['content']))
+                    $content .= '-' . strip_tags($value['content']) . "\n\n";
             }
 
             $query->next();
@@ -95,9 +97,9 @@ class SubmissionInfo extends AbstractRunner implements InterfaceRunner {
         return $content;
     }
 
-    public function fixSerializedString($serializedString) {
+    public function fixSerializedString($serializedString)
+    {
         $serializedString = trim($serializedString);
-
         return preg_replace_callback(
             '/s:(\d+):"(.*?)";/s',
             function ($matches) {

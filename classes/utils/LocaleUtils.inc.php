@@ -4,13 +4,6 @@ namespace CalidadFECYT\classes\utils;
 
 class LocaleUtils
 {
-    /**
-     * Obtiene un dato localizado con un fallback si no está disponible en el idioma actual
-     * @param object $object Objeto con método getData (e.g., Author)
-     * @param string $field Nombre del campo (e.g., 'givenName', 'familyName', 'affiliation')
-     * @param string $locale Idioma actual (e.g., 'es_ES', 'en_US')
-     * @return string
-     */
     public static function getLocalizedDataWithFallback($object, string $field, string $defaultLocale = null): ?string
     {
         $locale = $defaultLocale ?? \AppLocale::getLocale();
