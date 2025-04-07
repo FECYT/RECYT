@@ -28,7 +28,7 @@ class DataAuthors extends AbstractRunner implements InterfaceRunner
             $locale = \AppLocale::getLocale();
 
             $file = fopen($dirFiles . "/autores_" . $dateFrom . "_" . $dateTo . ".csv", "w");
-            fputcsv($file, array("ID envío", "DOI", "ID autor", "Nombre", "Apellidos", "Institución", "País", "Correo electrónico"));
+            fputcsv($file, array("ID envío", "DOI", "ID autor", "Nombre", "Apellidos", "Institución", "País", "Filiación extranjera", "Correo electrónico"));
 
             $submissions = $this->getSubmissions($dateFrom, $dateTo);
             foreach ($submissions as $submission) {

@@ -5,6 +5,7 @@ namespace CalidadFECYT\classes\export;
 use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
+
 import('lib.pkp.classes.submission.SubmissionComment');
 
 class Editorial extends AbstractRunner implements InterfaceRunner
@@ -370,17 +371,62 @@ class Editorial extends AbstractRunner implements InterfaceRunner
         $entriesEmail = $this->getEmailLog($submissionId);
         $entries = array_merge($entriesEvent, $entriesEmail);
 
+        $queryDao = \DAORegistry::getDAO('QueryDAO');
+        $queries = $queryDao->getByAssoc(ASSOC_TYPE_SUBMISSION, $submissionId)->toArray();
+
+        $noteDao = \DAORegistry::getDAO('NoteDAO');
+        foreach ($queries as $query) {
+            $notes = $noteDao->getByAssoc(ASSOC_TYPE_QUERY, $query->getId())->toArray();
+            $entries = array_merge($entries, $notes);
+        }
+
         usort($entries, function ($a, $b) {
-            if ($a->date == $b->date)
-                return 0;
-            return $a->date < $b->date ? 1 : -1;
+
+            if ($a instanceof \PKP\log\EmailLogEntry) {
+                $dateA = $a->getDateSent();
+            } elseif ($a instanceof \PKP\log\SubmissionEventLogEntry) {
+                $dateA = $a->getDateLogged();
+            } elseif ($a instanceof \PKP\note\Note) {
+                $dateA = $a->getDateCreated();
+            } else {
+                $dateA = $a->date;
+            }
+
+            if ($b instanceof \PKP\log\EmailLogEntry) {
+                $dateB = $b->getDateSent();
+            } elseif ($b instanceof \PKP\log\SubmissionEventLogEntry) {
+                $dateB = $b->getDateLogged();
+            } elseif ($b instanceof \PKP\note\Note) {
+                $dateB = $b->getDateCreated();
+            } else {
+                $dateB = $b->date;
+            }
+
+            return strcmp($dateB, $dateA);
         });
 
+        $headers = [
+            __('common.id'),
+            __('common.user'),
+            __('common.date'),
+            __('common.event')
+        ];
+
+
         $file = fopen($dirFiles . "/Historial.csv", "w");
+
+        fputcsv($file, $headers);
         $userDao = \DAORegistry::getDAO('UserDAO'); /* @var $userDao \UserDAO */
         $eventLogDao = \DAORegistry::getDAO('SubmissionEventLogDAO'); /* @var $submissionEventLogDao \SubmissionEventLogDAO */
 
         foreach ($entries as $entry) {
+
+            $userId = $entry instanceof \PKP\log\EmailLogEntry ? $entry->getSenderId() : $entry->user_id;
+
+            $user = $userDao->retrieve(
+                'SELECT * FROM users WHERE user_id = ?',
+                [$userId]
+            );
             if ($entry->message) {
                 $eventLog = $eventLogDao->getById($entry->id);
                 $eventParams = $eventLog->getParams();
@@ -407,14 +453,39 @@ class Editorial extends AbstractRunner implements InterfaceRunner
                         'submissionFileId' => $eventParams['submissionFileId'],
                     )),
                 ));
-            } else {
-                fputcsv($file, array(
+            } elseif ($entry instanceof \PKP\note\Note) {
+                fputcsv($file, [
                     $entry->id,
-                    $userDao->getUserFullName($entry->sender_id),
-                    date("Y-m-d", strtotime($entry->date)),
-                    __('submission.event.subjectPrefix') . ' ' . $entry->subject,
-                    strip_tags($entry->body),
-                ));
+                    $user ? $user->getFullName() : '',
+                    $entry->getDateCreated(),
+                    $entry->getTitle() . ': ' . strip_tags($entry->getContents()),
+                ]);
+
+
+            } else {
+                fputcsv($file, [
+                    $entry->id,
+                    $user ? $user->getFullName() : '',
+                    $entry->getDateLogged(),
+                    __($entry->getMessage(), array(
+                        'authorName' => $entry->getLocalizedData('authorName'),
+                        'editorName' => $entry->getLocalizedData('editorName'),
+                        'submissionId' => $entry->getLocalizedData('submissionId'),
+                        'submissionFileId' => $entry->getLocalizedData('submissionFileId'),
+                        'decision' => $entry->getLocalizedData('decision'),
+                        'round' => $entry->getLocalizedData('round'),
+                        'reviewerName' => $entry->getLocalizedData('reviewerName'),
+                        'fileId' => $entry->getLocalizedData('fileId'),
+                        'username' => $entry->getLocalizedData('username'),
+                        'name' => $entry->getLocalizedData('name'),
+                        'originalFileName' => $entry->getLocalizedData('originalFileName'),
+                        'title' => $entry->getLocalizedData('title'),
+                        'userGroupName' => $entry->getLocalizedData('userGroupName'),
+                        'fileRevision' => $entry->getLocalizedData('fileRevision'),
+                        'filename' => $entry->getLocalizedData('filename'),
+                        'userName' => $entry->getLocalizedData('userName'),
+                    )),
+                ]);
             }
         }
 

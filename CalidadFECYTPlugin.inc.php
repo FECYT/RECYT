@@ -107,7 +107,6 @@ class CalidadFECYTPlugin extends GenericPlugin
 
     public function manage($args, $request)
     {
-        error_log("manage() called with verb: " . $request->getUserVar('verb'));
         $this->import('classes.main.CalidadFECYT');
         $templateMgr = TemplateManager::getManager($request);
         $context = $request->getContext();
@@ -143,7 +142,11 @@ class CalidadFECYTPlugin extends GenericPlugin
                     $linkActions[] = $exportAction;
                 }
 
-                $templateParams['submissions'] = $this->getSubmissionsByDateRange($context->getId(), $defaultDateFrom, $defaultDateTo);
+                $lastCompletedYear = date('Y') - 1;
+                $submissionsDateFrom = date('Y-m-d', strtotime("$lastCompletedYear-01-01"));
+
+                $templateParams['submissions'] = $this->getSubmissionsByDateRange($context->getId(), $submissionsDateFrom, $defaultDateTo);
+
                 $templateParams['exportAllAction'] = true;
                 $templateParams['linkActions'] = $linkActions;
                 $templateMgr->assign($templateParams);
@@ -211,14 +214,10 @@ class CalidadFECYTPlugin extends GenericPlugin
                     $context = $request->getContext();
                     $dateFrom = $request->getUserVar('dateFrom') ? date('Ymd', strtotime($request->getUserVar('dateFrom'))) : null;
                     $dateTo = $request->getUserVar('dateTo') ? date('Ymd', strtotime($request->getUserVar('dateTo'))) : null;
-                    error_log("fetchSubmissions called with dateFrom: $dateFrom, dateTo: $dateTo, contextId: " . $context->getId());
-
                     $submissions = $this->getSubmissionsByDateRange($context->getId(), $dateFrom, $dateTo);
-                    error_log("Submissions found: " . count($submissions));
 
                     return new JSONMessage(true, $submissions);
                 } catch (Exception $e) {
-                    error_log("Error in fetchSubmissions: " . $e->getMessage());
                     return new JSONMessage(false, htmlspecialchars($e->getMessage()));
                 }
             default:
