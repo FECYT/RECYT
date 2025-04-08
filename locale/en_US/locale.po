@@ -3,7 +3,7 @@ msgid "plugins.generic.calidadfecyt.displayName"
 msgstr "Calidad FECYT"
 
 msgid "plugins.generic.calidadfecyt.description"
-msgstr "Complemento desarrollado para versiones OJS 3.2x que automatiza la descarga de "
+msgstr "Complemento desarrollado para versiones OJS 3.3x que automatiza la descarga de "
 "documentación requerida por la Fundación Española para la Ciencia y Tecnología "
 "en los procesos de acreditación para la obtención y/o renovación del sello de calidad FECYT. "
 "\n<br/>"
