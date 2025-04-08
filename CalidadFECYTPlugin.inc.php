@@ -87,16 +87,16 @@ class CalidadFECYTPlugin extends GenericPlugin
         $navigationMenuItem = $navigationMenuItemDao->getByPath($contextId, 'fecyt-stats');
 
         if (!$navigationMenuItem) {
-            $statsContentEN = $this->generateStatsContent($context, 'en');
-            $statsContentES = $this->generateStatsContent($context, 'es');
+            $statsContentEN = $this->generateStatsContent($context, 'en_US');
+            $statsContentES = $this->generateStatsContent($context, 'es_ES');
             $navigationMenuItem = $navigationMenuItemDao->newDataObject();
             $navigationMenuItem->setPath('fecyt-stats');
             $navigationMenuItem->setType('NMI_TYPE_CUSTOM');
             $navigationMenuItem->setContextId($contextId);
-            $navigationMenuItem->setTitle(__('plugins.generic.calidadfecyt.stats.menu'), 'en');
-            $navigationMenuItem->setTitle(__('plugins.generic.calidadfecyt.stats.menu'), 'es');
-            $navigationMenuItem->setContent($statsContentEN, 'en');
-            $navigationMenuItem->setContent($statsContentES, 'es');
+            $navigationMenuItem->setTitle(__('plugins.generic.calidadfecyt.stats.menu'), 'en_US');
+            $navigationMenuItem->setTitle(__('plugins.generic.calidadfecyt.stats.menu'), 'es_ES');
+            $navigationMenuItem->setContent($statsContentEN, 'en_US');
+            $navigationMenuItem->setContent($statsContentES, 'es_ES');
 
             $navigationMenuItemDao->insertObject($navigationMenuItem);
 
@@ -345,7 +345,7 @@ class CalidadFECYTPlugin extends GenericPlugin
                 }
 
                 if ($status == STATUS_DECLINED) {
-                    $stats['declined']++;  // Artículo rechazado
+                    $stats['declined']++;
                 }
             }
         }

@@ -135,6 +135,9 @@ msgstr "Accepted Recommendations"
 msgid "plugins.generic.calidadfecyt.stats.csv.declined"
 msgstr "Declined Recommendations"
 
+msgid "plugins.generic.calidadfecyt.stats.reviewers"
+msgstr "Reviewers"
+
 # Statistics Text
 msgid "plugins.generic.calidadfecyt.stats.header"
 msgstr "Reviewers of the journal for the year %s and rejection rate"
