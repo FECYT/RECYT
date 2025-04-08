@@ -89,3 +89,61 @@ msgstr "Export editorial"
 
 msgid "plugins.generic.calidadfecyt.export.editorial.description"
 msgstr "Export editorial flow of the selected submission"
+
+msgid "plugins.generic.calidadfecyt.noSubmissionsFound"
+msgstr "No submissions found for this date range"
+
+# Date range
+msgid "plugins.generic.calidadfecyt.dateRange"
+msgstr "Date Range"
+
+msgid "plugins.generic.calidadfecyt.dateFrom"
+msgstr "From: "
+
+msgid "plugins.generic.calidadfecyt.dateTo"
+msgstr "To: "
+
+# URLs
+msgid "plugins.generic.calidadfecyt.editorialProcess"
+msgstr "Editorial Process, Periodicity, Policy, Ethics, Preservation"
+
+msgid "plugins.generic.calidadfecyt.editorialTeam"
+msgstr "Editorial Team"
+
+# Statistics
+msgid "plugins.generic.calidadfecyt.export.Statistics.description"
+msgstr "Export a summary of the last year and statistics on submissions and reviewers"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.reviewer_id"
+msgstr "Reviewer ID"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.username"
+msgstr "Username"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.full_name"
+msgstr "Full Name"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.email"
+msgstr "Email"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.num_reviews"
+msgstr "Number of Reviews"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.accepted"
+msgstr "Accepted Recommendations"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.declined"
+msgstr "Declined Recommendations"
+
+# Statistics Text
+msgid "plugins.generic.calidadfecyt.stats.header"
+msgstr "Reviewers of the journal for the year %s and rejection rate"
+
+msgid "plugins.generic.calidadfecyt.stats.summary"
+msgstr "On the digital platform of %8$s, a total of %1$d articles were received during %2$s. Of these, during %3$s, %4$d were published with a rejection rate of %5$.1f%%. The article evaluation process was double-blind, involving %6$d reviewers. %7$.1f%% of the reviewers are from foreign scientific institutions."
+
+msgid "plugins.generic.calidadfecyt.stats.menu"
+msgstr "Journal reviewers and rejection rate"
+
+msgid "plugins.generic.calidadfecyt.stats.menu.description"
+msgstr "Displays a summary of submission and reviewer statistics for the last completed year."

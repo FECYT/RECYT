@@ -89,3 +89,61 @@ msgstr "Exportación flujo editorial"
 
 msgid "plugins.generic.calidadfecyt.export.editorial.description"
 msgstr "Exportar flujo editorial del envío seleccionado"
+
+msgid "plugins.generic.calidadfecyt.noSubmissionsFound"
+msgstr "No se encontraron envíos para este rango de fechas"
+
+# Date range
+msgid "plugins.generic.calidadfecyt.dateRange"
+msgstr "Rango de fechas"
+
+msgid "plugins.generic.calidadfecyt.dateFrom"
+msgstr "Desde: "
+
+msgid "plugins.generic.calidadfecyt.dateTo"
+msgstr "Hasta: "
+
+# URLs
+msgid "plugins.generic.calidadfecyt.editorialProcess"
+msgstr "Proceso editorial, periodicidad, política, ética, preservación"
+
+msgid "plugins.generic.calidadfecyt.editorialTeam"
+msgstr "Equipo editorial"
+
+# Statistics
+msgid "plugins.generic.calidadfecyt.export.Statistics.description"
+msgstr "Exportar resumen del último año y estadísticas sobre envíos y revisores"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.reviewer_id"
+msgstr "ID de revisor"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.username"
+msgstr "Nombre de usuario"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.full_name"
+msgstr "Nombre completo"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.email"
+msgstr "Correo electrónico"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.num_reviews"
+msgstr "Número de revisiones"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.accepted"
+msgstr "Recomendaciones aceptadas"
+
+msgid "plugins.generic.calidadfecyt.stats.csv.declined"
+msgstr "Recomendaciones rechazadas"
+
+# Statistics Text
+msgid "plugins.generic.calidadfecyt.stats.header"
+msgstr "Evaluadores de la revista del año %s y tasa de rechazo"
+
+msgid "plugins.generic.calidadfecyt.stats.summary"
+msgstr "En la plataforma digital de %8$s, se recibieron un total de %1$d artículos durante %2$s. De estos, durante %3$s, se publicaron %4$d con una tasa de rechazo de %5$.1f%%. El proceso de evaluación de artículos fue doble ciego, involucrando a %6$d revisores. El %7$.1f%% de los revisores provienen de instituciones científicas extranjeras."
+
+msgid "plugins.generic.calidadfecyt.stats.menu"
+msgstr "Evaluadores de la revista y tasa de rechazo"
+
+msgid "plugins.generic.calidadfecyt.stats.menu.description"
+msgstr "Muestra un resumen de estadísticas de envíos y revisores del último año completo."

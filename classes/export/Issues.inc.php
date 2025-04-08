@@ -5,17 +5,18 @@ namespace CalidadFECYT\classes\export;
 use CalidadFECYT\classes\abstracts\AbstractRunner;
 use CalidadFECYT\classes\interfaces\InterfaceRunner;
 use CalidadFECYT\classes\utils\ZipUtils;
+use CalidadFECYT\classes\utils\LocaleUtils;
 
-class Issues extends AbstractRunner implements InterfaceRunner {
-
+class Issues extends AbstractRunner implements InterfaceRunner
+{
     private $contextId;
-
     public function run(&$params)
     {
         $fileManager = new \FileManager();
-        $context = $params["context"];
-        $dirFiles = $params['temporaryFullFilePath'];
-        if(!$context) {
+        $context = $params["context"] ?? null;
+        $dirFiles = $params['temporaryFullFilePath'] ?? '';
+
+        if (!$context) {
             throw new \Exception("Revista no encontrada");
         }
         $this->contextId = $context->getId();
@@ -25,14 +26,15 @@ class Issues extends AbstractRunner implements InterfaceRunner {
                 $data = $this->getData($issueItem['id']);
                 $submissions = $data['results'];
                 $countAuthors = $data['count'];
-                $volume = $issueItem['volume'] ? "Vol.".$issueItem['volume']." " : '';
-                $number = $issueItem['number'] ? "Num.".$issueItem['number']." " : '';
-                $year = $issueItem['year'] ? "(".$issueItem['year'].")" : '';
-                $nameFile = "/".$volume.$number.$year;
-                $file = fopen($dirFiles . $nameFile.".csv", "w");
+                $volume = $issueItem['volume'] ? "Vol." . $issueItem['volume'] . " " : '';
+                $number = $issueItem['number'] ? "Num." . $issueItem['number'] . " " : '';
+                $year = $issueItem['year'] ? "(" . $issueItem['year'] . ")" : '';
+                $nameFile = "/" . $volume . $number . $year;
+                $file = fopen($dirFiles . $nameFile . ".csv", "w");
 
-                if (! empty($data['results'])) {
-                    $columns = ["Sección", "Título"];
+                if (!empty($data['results'])) {
+
+                    $columns = [];
                     for ($a = 1; $a <= $countAuthors; $a++) {
                         $columns = array_merge($columns, [
                             "Nombre (autor " . $a . ")",
@@ -41,39 +43,68 @@ class Issues extends AbstractRunner implements InterfaceRunner {
                             "Rol (autor " . $a . ")",
                         ]);
                     }
+
+                    $columns = array_merge($columns, [
+                        "Sección",
+                        "Filiación extranjera",
+                        "Título",
+                        "DOI",
+                        "Número de autores"
+                    ]);
                     fputcsv($file, array_values($columns));
 
                     foreach ($submissions as $submission) {
-                        $results = [$submission['section'], $submission['title']];
+                        $authorCount = count($submission['authors']);
 
-                        for ($a = 1; $a <= count($submission['authors']); $a++) {
-                            $results = array_merge($results, [
-                                $submission['authors'][$a - 1]['givenName'],
-                                $submission['authors'][$a - 1]['familyName'],
-                                $submission['authors'][$a - 1]['affiliation'],
-                                $submission['authors'][$a - 1]['userGroup']
-                            ]);
-
+                        $hasForeignAuthor = false;
+                        foreach ($submission['authors'] as $author) {
+                            if ($author['country'] && $author['country'] !== 'ES') {
+                                $hasForeignAuthor = true;
+                                break;
+                            }
                         }
+                        $isForeign = $hasForeignAuthor ? 'Sí' : 'No';
+
+                        $results = [];
+                        for ($a = 1; $a <= $countAuthors; $a++) {
+                            if ($a <= count($submission['authors'])) {
+                                $results = array_merge($results, [
+                                    $submission['authors'][$a - 1]['givenName'],
+                                    $submission['authors'][$a - 1]['familyName'],
+                                    $submission['authors'][$a - 1]['affiliation'],
+                                    $submission['authors'][$a - 1]['userGroup']
+                                ]);
+                            } else {
+
+                                $results = array_merge($results, ['', '', '', '']);
+                            }
+                        }
+                        $results = array_merge($results, [
+                            $submission['section'],
+                            $isForeign,
+                            $submission['title'],
+                            $submission['doi'],
+                            $authorCount
+                        ]);
+
                         fputcsv($file, array_values($results));
                     }
                 } else {
-                    fputcsv($file, array("Este envío no tiene artículos"));
+                    fputcsv($file, ["Este envío no tiene artículos"]);
                 }
 
                 fclose($file);
             }
 
-            if(!isset($params['exportAll'])) {
+            if (!isset($params['exportAll'])) {
                 $zipFilename = $dirFiles . '/issues.zip';
                 ZipUtils::zip([], [$dirFiles], $zipFilename);
                 $fileManager->downloadByPath($zipFilename);
             }
         } catch (\Exception $e) {
-            throw new \Exception('Se ha producido un error:' . $e->getMessage());
+            throw new \Exception('Se ha producido un error: ' . $e->getMessage());
         }
     }
-
     public function getData($issue)
     {
         $issueSubmissions = iterator_to_array(\Services::get('submission')->getMany([
@@ -89,25 +120,25 @@ class Issues extends AbstractRunner implements InterfaceRunner {
         foreach ($issueSubmissions as $submission) {
             $publication = $submission->getCurrentPublication();
             $maxAuthors = max($maxAuthors, count($publication->getData('authors')));
-
             $sectionId = $submission->getCurrentPublication()->getData('sectionId');
             $section = \Application::get()->getSectionDao()->getById($sectionId);
-
             $results[] = [
                 'title' => $submission->getCurrentPublication()->getLocalizedData('title'),
                 'section' => $section->getData('hideTitle') ? '' : $section->getLocalizedData('title'),
-                'authors' => array_map(function($author) {
-                $userGroupDao = \DAORegistry::getDAO('UserGroupDAO'); /* @var $userGroupDao \UserGroupDAO */
-                $userGroup = $userGroupDao->getById($author->getData('userGroupId'))->getLocalizedData('name');
+                'doi' => $publication->getStoredPubId('doi') ?: '',
+                'authors' => array_map(function ($author) {
+                    $userGroupDao = \DAORegistry::getDAO('UserGroupDAO'); /* @var $userGroupDao \UserGroupDAO */
+                    $userGroup = $userGroupDao->getById($author->getData('userGroupId'))->getLocalizedData('name');
 
-                return [
-                    'givenName' => $author->getLocalizedGivenName(),
-                    'familyName' => $author->getLocalizedFamilyName(),
-                    'affiliation' => $author->getLocalizedData('affiliation'),
-                    'userGroup' => $userGroup ?? ''
-                ];
+                    return [
+                        'givenName' => LocaleUtils::getLocalizedDataWithFallback($author, 'givenName'),
+                        'familyName' => LocaleUtils::getLocalizedDataWithFallback($author, 'familyName'),
+                        'affiliation' => LocaleUtils::getLocalizedDataWithFallback($author, 'affiliation'),
+                        'userGroup' => $userGroup ?? '',
+                        'country' => $author->getCountry() ?? ''
+                    ];
                 }, $publication->getData('authors'))
-                ];
+            ];
         }
 
         return array(
@@ -123,11 +154,11 @@ class Issues extends AbstractRunner implements InterfaceRunner {
         $query = $issueDao->retrieve(
             "SELECT issue_id as id, volume, year, number
             FROM issues
-            WHERE journal_id = ".$this->contextId."
+            WHERE journal_id = " . $this->contextId . "
             AND published = 1
             ORDER BY date_published DESC
             LIMIT 4"
-            );
+        );
 
         while ($query->valid()) {
             $row = get_object_vars($query->current());
