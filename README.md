@@ -1,5 +1,12 @@
 # Plugin de Calidad FECYT
 
+> [!IMPORTANT]
+> **Este repositorio ha sido archivado y se encuentra en modo solo lectura.**<br/>
+> No se aceptan más issues, pull requests ni modificaciones.
+> 
+> La URJC darà continuidad al proyecto en [este repositorio](https://github.com/MejorAbierta/RECYT).<br/>
+> Para cualquier duda, problema o contribución, diríjase al proyecto MejorAbierta.
+
 Módulo para OJS que automatiza la descarga de parte de la documentación requerida por la Fundación Española para la Ciencia y Tecnología en los procesos de acreditación para la obtención y/o renovación del sello de calidad FECYT.  
 
 El plugin ha sido desarrollado para OJS 3.2 y OJS 3.3, siendo esta última la versión recomendada.
